@@ -1,13 +1,29 @@
-# Churn Prediction
+# Telco Customer Churn Prediction
 
-A machine learning project that predicts customer churn.
+Predicts customer churn using the Telco Customer Churn dataset.
 
 ## Setup
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+make venv
 ```
+
+## Project Structure
+
+```
+├── src/
+│   ├── preprocess.py
+│   ├── train.py
+│   ├── evaluate.py
+│   └── predict.py
+├── data/
+│   └── raw/
+│       └── WA_Fn-UseC_-Telco-Customer-Churn.csv
+├── Makefile
+├── requirements.txt
+└── README.md
+```
+
 
 ## Data attribution
 
