@@ -1,22 +1,57 @@
+"""
+preprocess.py — Load raw data, clean it, encode categoricals, and save processed data.
+"""
+
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
-df = pd.read_csv('../input/telco-customer-churn/WA_Fn-UseC_-Telco-Customer-Churn.csv')
 
-df = df.drop(['customerID'], axis = 1)
+def load_and_clean(path):
+    """Load CSV and perform basic cleaning."""
+    df = pd.read_csv(path)
 
-df['TotalCharges'] = pd.to_numeric(df.TotalCharges, errors='coerce')
+    # Drop the customer ID column — it is not a feature
+    df = df.drop(columns=["customerID"])
 
-df.drop(labels=df[df['tenure'] == 0].index, axis=0, inplace=True)
+    # TotalCharges is stored as string in the raw data; convert to numeric
+    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
 
-df.fillna(df["TotalCharges"].mean())
+    # Rows with tenure == 0 have missing TotalCharges; drop them
+    df = df[df["tenure"] != 0].copy()
 
-df["SeniorCitizen"]= df["SeniorCitizen"].map({0: "No", 1: "Yes"})
+    # Fill any remaining NaN in TotalCharges with the column mean
+    df["TotalCharges"] = df["TotalCharges"].fillna(df["TotalCharges"].mean())
 
-def object_to_int(dataframe_series):
-    if dataframe_series.dtype=='object':
-        dataframe_series = LabelEncoder().fit_transform(dataframe_series)
-    return dataframe_series
+    # SeniorCitizen is 0/1 in raw data — convert to string for uniform encoding
+    df["SeniorCitizen"] = df["SeniorCitizen"].map({0: "No", 1: "Yes"})
 
-df = df.apply(lambda x: object_to_int(x))
+    return df
+
+
+def encode_categoricals(df):
+    """Label-encode every object column."""
+    le = LabelEncoder()
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = le.fit_transform(df[col])
+    return df
+
+
+def main():
+    raw_path = "data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv"
+    out_path = "data/processed/churn_processed.csv"
+
+    print(f"Loading raw data from {raw_path} ...")
+    df = load_and_clean(raw_path)
+
+    print("Encoding categorical features ...")
+    df = encode_categoricals(df)
+
+    print(f"Saving processed data to {out_path} ...")
+    df.to_csv(out_path, index=False)
+
+    print(f"Done. {len(df)} rows written.")
+
+
+if __name__ == "__main__":
+    main()

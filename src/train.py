@@ -1,18 +1,58 @@
+"""
+train.py — Load processed data, split, scale, train a model, and save it to disk.
+"""
+
+import pickle
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import accuracy_score, classification_report
 
-X = df.drop(columns = ['Churn'])
-y = df['Churn'].values
 
-X_train, X_test, y_train, y_test = train_test_split(X,y,test_size = 0.30, random_state = 40, stratify=y)
+# --- Settings (hard-coded for now) ---
+PROCESSED_DATA = "data/processed/churn_processed.csv"
+MODEL_PATH = "models/model.pkl"
+TEST_SIZE = 0.30
+RANDOM_STATE = 40
+NUM_COLS = ["tenure", "MonthlyCharges", "TotalCharges"]
 
-num_cols = ["tenure", 'MonthlyCharges', 'TotalCharges']
-scaler= StandardScaler()
 
-X_train[num_cols] = scaler.fit_transform(X_train[num_cols])
-X_test[num_cols] = scaler.transform(X_test[num_cols])
+def main():
+    # Load processed data
+    print(f"Loading data from {PROCESSED_DATA} ...")
+    df = pd.read_csv(PROCESSED_DATA)
 
-gb = GradientBoostingClassifier()
-gb.fit(X_train, y_train)
+    # Separate features and target
+    X = df.drop(columns=["Churn"])
+    y = df["Churn"].values
+
+    # Train / test split (stratified to preserve class balance)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+    )
+
+    # Scale numerical columns
+    scaler = StandardScaler()
+    X_train[NUM_COLS] = scaler.fit_transform(X_train[NUM_COLS])
+    X_test[NUM_COLS] = scaler.transform(X_test[NUM_COLS])
+
+    # Train model
+    print("Training GradientBoostingClassifier ...")
+    model = GradientBoostingClassifier(random_state=RANDOM_STATE)
+    model.fit(X_train, y_train)
+
+    # Quick evaluation on test set
+    yhat = model.predict(X_test)
+    print(f"Test accuracy: {accuracy_score(y_test, yhat):.4f}")
+    print(classification_report(y_test, yhat))
+
+    # Save model and scaler together
+    artifact = {"model": model, "scaler": scaler}
+    with open(MODEL_PATH, "wb") as f:
+        pickle.dump(artifact, f)
+    print(f"Model saved to {MODEL_PATH}")
+
+
+if __name__ == "__main__":
+    main()
