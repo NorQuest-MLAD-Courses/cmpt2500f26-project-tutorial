@@ -1,4 +1,4 @@
-.PHONY: venv preprocess train evaluate predict clean
+.PHONY: venv preprocess train evaluate predict test clean
 
 venv:
 	python3 -m venv .venv
@@ -16,6 +16,9 @@ evaluate:
 
 predict:
 	.venv/bin/python src/predict.py
+
+test:
+	.venv/bin/pytest
 
 clean:
 	rm -rf .venv models/*.pkl data/processed/*.csv

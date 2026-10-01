@@ -1,5 +1,5 @@
 """
-evaluate.py — Load a saved model and evaluate it on the test split.
+evaluate.py — Load a saved pipeline and evaluate it on the test split.
 """
 
 import pickle
@@ -12,7 +12,6 @@ PROCESSED_DATA = "data/processed/churn_processed.csv"
 MODEL_PATH = "models/model.pkl"
 TEST_SIZE = 0.30
 RANDOM_STATE = 40
-NUM_COLS = ["tenure", "MonthlyCharges", "TotalCharges"]
 
 
 def main():
@@ -26,18 +25,13 @@ def main():
         X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
     )
 
-    # Load saved model and scaler
-    print(f"Loading model from {MODEL_PATH} ...")
+    # Load pipeline (scaling is built in)
+    print(f"Loading pipeline from {MODEL_PATH} ...")
     with open(MODEL_PATH, "rb") as f:
-        artifact = pickle.load(f)
-    model = artifact["model"]
-    scaler = artifact["scaler"]
-
-    # Scale test features
-    X_test[NUM_COLS] = scaler.transform(X_test[NUM_COLS])
+        pipeline = pickle.load(f)
 
     # Predict and report
-    yhat = model.predict(X_test)
+    yhat = pipeline.predict(X_test)
     print(f"Accuracy: {accuracy_score(y_test, yhat):.4f}")
     print()
     print(classification_report(y_test, yhat))

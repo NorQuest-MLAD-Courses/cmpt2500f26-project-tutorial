@@ -12,9 +12,10 @@ make venv
 
 ```bash
 make preprocess   # clean and encode raw data
-make train        # train model and save to models/
-make evaluate     # evaluate saved model on test split
+make train        # train pipeline and save to models/
+make evaluate     # evaluate saved pipeline on test split
 make predict      # print predictions to screen
+make test         # run test suite
 ```
 
 ## Project Structure
@@ -25,11 +26,15 @@ make predict      # print predictions to screen
 │   ├── train.py
 │   ├── evaluate.py
 │   └── predict.py
+├── tests/
+│   ├── test_preprocess.py
+│   └── test_train.py
 ├── data/
 │   ├── raw/
 │   │   └── WA_Fn-UseC_-Telco-Customer-Churn.csv
 │   └── processed/
 ├── models/
+├── pytest.ini
 ├── Makefile
 ├── requirements.txt
 └── README.md
