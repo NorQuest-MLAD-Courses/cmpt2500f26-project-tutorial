@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 
+from utils.config import load_config
+
 
 def load_and_clean(path):
     """Load CSV and perform basic cleaning."""
@@ -35,24 +37,28 @@ def encode_categoricals(df):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Preprocess raw churn data.")
-    parser.add_argument("--input", default="data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv",
-                        help="Path to raw CSV")
-    parser.add_argument("--output", default="data/processed/churn_processed.csv",
-                        help="Path to save processed CSV")
+    parser.add_argument("--config", default="config/default.yaml",
+                        help="Path to YAML config file")
+    parser.add_argument("--input", default=None, help="Override raw data path")
+    parser.add_argument("--output", default=None, help="Override output path")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    cfg = load_config(args.config)
 
-    print(f"Loading raw data from {args.input} ...")
-    df = load_and_clean(args.input)
+    raw_path = args.input or cfg["paths"]["raw_data"]
+    out_path = args.output or cfg["paths"]["processed_data"]
+
+    print(f"Loading raw data from {raw_path} ...")
+    df = load_and_clean(raw_path)
 
     print("Encoding categorical features ...")
     df = encode_categoricals(df)
 
-    print(f"Saving processed data to {args.output} ...")
-    df.to_csv(args.output, index=False)
+    print(f"Saving processed data to {out_path} ...")
+    df.to_csv(out_path, index=False)
 
     print(f"Done. {len(df)} rows written.")
 

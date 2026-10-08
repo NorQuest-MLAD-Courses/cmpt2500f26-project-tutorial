@@ -1,0 +1,21 @@
+# Default configuration for the churn prediction project.
+
+paths:
+  raw_data: data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv
+  processed_data: data/processed/churn_processed.csv
+  model: models/model.pkl
+
+features:
+  numerical:
+    - tenure
+    - MonthlyCharges
+    - TotalCharges
+
+training:
+  test_size: 0.30
+  random_state: 40
+
+model:
+  name: GradientBoostingClassifier
+  params:
+    random_state: 40

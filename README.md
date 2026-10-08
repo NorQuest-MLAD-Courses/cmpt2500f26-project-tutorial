@@ -10,7 +10,7 @@ make venv
 
 ## Usage
 
-Default paths (via Makefile):
+All settings are read from `config/default.yaml`. Command-line flags can override paths.
 
 ```bash
 make preprocess
@@ -19,13 +19,10 @@ make evaluate
 make predict
 ```
 
-Custom paths (via argparse):
+Use a custom config:
 
 ```bash
-.venv/bin/python src/preprocess.py --input data/raw/other.csv --output data/processed/out.csv
-.venv/bin/python src/train.py --data data/processed/out.csv --model-out models/v2.pkl
-.venv/bin/python src/evaluate.py --model models/v2.pkl --data data/processed/out.csv
-.venv/bin/python src/predict.py --model models/v2.pkl --data data/processed/out.csv
+.venv/bin/python src/train.py --config config/experiment.yaml
 ```
 
 ## Testing
@@ -37,14 +34,20 @@ make test
 ## Project Structure
 
 ```
+├── config/
+│   └── default.yaml
 ├── src/
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── config.py
 │   ├── preprocess.py
 │   ├── train.py
 │   ├── evaluate.py
 │   └── predict.py
 ├── tests/
 │   ├── test_preprocess.py
-│   └── test_train.py
+│   ├── test_train.py
+│   └── test_config.py
 ├── data/
 │   ├── raw/
 │   │   └── WA_Fn-UseC_-Telco-Customer-Churn.csv
