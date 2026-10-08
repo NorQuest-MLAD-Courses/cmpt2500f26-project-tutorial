@@ -2,31 +2,35 @@
 predict.py — Load a saved pipeline and print predictions for new data.
 """
 
+import argparse
 import pickle
 import pandas as pd
 
 
-MODEL_PATH = "models/model.pkl"
-DATA_PATH = "data/processed/churn_processed.csv"
+def parse_args():
+    parser = argparse.ArgumentParser(description="Predict churn using a saved pipeline.")
+    parser.add_argument("--data", default="data/processed/churn_processed.csv",
+                        help="Path to input CSV (features only, or with Churn column)")
+    parser.add_argument("--model", default="models/model.pkl",
+                        help="Path to saved pipeline")
+    return parser.parse_args()
 
 
 def main():
-    # Load pipeline
-    print(f"Loading pipeline from {MODEL_PATH} ...")
-    with open(MODEL_PATH, "rb") as f:
+    args = parse_args()
+
+    print(f"Loading pipeline from {args.model} ...")
+    with open(args.model, "rb") as f:
         pipeline = pickle.load(f)
 
-    # Load data (in practice this would be new, unseen data)
-    print(f"Loading data from {DATA_PATH} ...")
-    df = pd.read_csv(DATA_PATH)
+    print(f"Loading data from {args.data} ...")
+    df = pd.read_csv(args.data)
 
     if "Churn" in df.columns:
         df = df.drop(columns=["Churn"])
 
-    # Predict — the pipeline handles scaling internally
     yhat = pipeline.predict(df)
 
-    # Print predictions to stdout
     print("Predictions:")
     for i, pred in enumerate(yhat):
         print(f"  Row {i}: {'Churn' if pred == 1 else 'No Churn'}")

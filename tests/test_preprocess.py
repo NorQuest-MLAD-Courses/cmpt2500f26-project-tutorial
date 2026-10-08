@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import sys, os
 
-# Allow imports from src/
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from preprocess import load_and_clean, encode_categoricals

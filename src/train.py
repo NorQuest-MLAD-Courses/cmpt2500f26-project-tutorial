@@ -1,10 +1,8 @@
 """
 train.py — Load processed data, split, train a pipeline, and save it to disk.
-
-The pipeline bundles scaling and the classifier into a single object,
-so predict.py and evaluate.py no longer need to manage the scaler separately.
 """
 
+import argparse
 import pickle
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -15,55 +13,56 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import accuracy_score, classification_report
 
 
-# --- Settings ---
-PROCESSED_DATA = "data/processed/churn_processed.csv"
-MODEL_PATH = "models/model.pkl"
-TEST_SIZE = 0.30
-RANDOM_STATE = 40
 NUM_COLS = ["tenure", "MonthlyCharges", "TotalCharges"]
 
 
-def build_pipeline(num_cols):
+def build_pipeline(num_cols, random_state):
     """Construct a pipeline: scale numerics, pass-through the rest, then classify."""
     preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), num_cols),
-        ],
-        remainder="passthrough",  # leave non-numeric columns untouched
+        transformers=[("num", StandardScaler(), num_cols)],
+        remainder="passthrough",
     )
     return Pipeline([
         ("preprocessor", preprocessor),
-        ("classifier", GradientBoostingClassifier(random_state=RANDOM_STATE)),
+        ("classifier", GradientBoostingClassifier(random_state=random_state)),
     ])
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train a churn-prediction pipeline.")
+    parser.add_argument("--data", default="data/processed/churn_processed.csv",
+                        help="Path to processed CSV")
+    parser.add_argument("--model-out", default="models/model.pkl",
+                        help="Path to save the trained pipeline")
+    parser.add_argument("--test-size", type=float, default=0.30)
+    parser.add_argument("--random-state", type=int, default=40)
+    return parser.parse_args()
+
+
 def main():
-    # Load processed data
-    print(f"Loading data from {PROCESSED_DATA} ...")
-    df = pd.read_csv(PROCESSED_DATA)
+    args = parse_args()
+
+    print(f"Loading data from {args.data} ...")
+    df = pd.read_csv(args.data)
 
     X = df.drop(columns=["Churn"])
     y = df["Churn"].values
 
-    # Train / test split
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+        X, y, test_size=args.test_size, random_state=args.random_state, stratify=y
     )
 
-    # Build and train pipeline
     print("Training pipeline ...")
-    pipeline = build_pipeline(NUM_COLS)
+    pipeline = build_pipeline(NUM_COLS, args.random_state)
     pipeline.fit(X_train, y_train)
 
-    # Quick evaluation
     yhat = pipeline.predict(X_test)
     print(f"Test accuracy: {accuracy_score(y_test, yhat):.4f}")
     print(classification_report(y_test, yhat))
 
-    # Save the entire pipeline
-    with open(MODEL_PATH, "wb") as f:
+    with open(args.model_out, "wb") as f:
         pickle.dump(pipeline, f)
-    print(f"Pipeline saved to {MODEL_PATH}")
+    print(f"Pipeline saved to {args.model_out}")
 
 
 if __name__ == "__main__":

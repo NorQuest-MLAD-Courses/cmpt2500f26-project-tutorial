@@ -10,12 +10,28 @@ make venv
 
 ## Usage
 
+Default paths (via Makefile):
+
 ```bash
-make preprocess   # clean and encode raw data
-make train        # train pipeline and save to models/
-make evaluate     # evaluate saved pipeline on test split
-make predict      # print predictions to screen
-make test         # run test suite
+make preprocess
+make train
+make evaluate
+make predict
+```
+
+Custom paths (via argparse):
+
+```bash
+.venv/bin/python src/preprocess.py --input data/raw/other.csv --output data/processed/out.csv
+.venv/bin/python src/train.py --data data/processed/out.csv --model-out models/v2.pkl
+.venv/bin/python src/evaluate.py --model models/v2.pkl --data data/processed/out.csv
+.venv/bin/python src/predict.py --model models/v2.pkl --data data/processed/out.csv
+```
+
+## Testing
+
+```bash
+make test
 ```
 
 ## Project Structure
