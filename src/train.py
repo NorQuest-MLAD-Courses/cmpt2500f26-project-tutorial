@@ -1,37 +1,47 @@
 """
-train.py — Load processed data, split, train a pipeline, and save it to disk.
+train.py — Load processed data, split, train a pipeline, save it, and log to MLflow.
 
 The pipeline bundles scaling and the classifier into a single object,
-so predict.py and evaluate.py no longer need to manage the scaler separately.
+so predict.py and evaluate.py do not need to manage the scaler separately.
 
 This is the second stage of the pipeline. It reads the numeric table written
 by preprocess.py, trains a scikit-learn Pipeline and saves it to a file, so
-that evaluate.py and predict.py can load it without retraining.
+that evaluate.py and predict.py can load it without retraining. Each run is
+also recorded in MLflow: its parameters, its test metrics and the model
+itself, so runs can be compared later in the MLflow UI (make mlflow-ui).
 
 How to run (from the project root, after make preprocess):
     make train
     python src/train.py
     python src/train.py --config config/experiment.yaml
     python src/train.py --test-size 0.2 --random-state 42 --model-out models/m2.pkl
+    python src/train.py --experiment-name feature-test
 
 Settings come from config/default.yaml (or the file given with --config):
-paths, the numeric feature list, the train/test split and the model
-hyperparameters. Command-line flags override single values for one run.
+paths, the numeric feature list, the train/test split, the model
+hyperparameters and the MLflow tracking URI and experiment name.
+Command-line flags override single values for one run.
 
 Input:  the processed CSV (paths.processed_data, or --data)
 Output: the whole pickled Pipeline (paths.model, or --model-out),
-        plus test accuracy and a classification report, printed
+        an MLflow run (parameters, metrics and the logged model) in the
+        tracking store (sqlite:///mlflow.db by default),
+        plus test accuracy, F1 and a classification report, printed
 """
 
 import argparse
 import pickle
 import pandas as pd
+import mlflow
+# skops is the safe serialisation format MLflow 3 uses for scikit-learn
+# models; we use two of its helpers when logging the model below.
+from skops.io import dumps, get_untrusted_types
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, f1_score
 
 # Our YAML loader from src/utils/config.py (importable because src/ is the
 # script's folder and so is on Python's import path).
@@ -77,8 +87,8 @@ def parse_args():
     """Read command-line options.
 
     Returns:
-        An argparse.Namespace with .config, .data, .model_out, .test_size and
-        .random_state.
+        An argparse.Namespace with .config, .data, .model_out, .test_size,
+        .random_state and .experiment_name.
     """
     # Every override flag defaults to None, meaning "not given on the command
     # line"; main() then takes the value from the config file.
@@ -96,11 +106,13 @@ def parse_args():
                         help="Override the test-set fraction from the config")
     parser.add_argument("--random-state", type=int, default=None,
                         help="Override the random seed from the config")
+    parser.add_argument("--experiment-name", default=None,
+                        help="Override the MLflow experiment name from the config")
     return parser.parse_args()
 
 
 def main():
-    """Train the pipeline on the training split, report test scores and save it."""
+    """Train the pipeline, report test scores, save it and log the run to MLflow."""
     args = parse_args()
     cfg = load_config(args.config)
 
@@ -115,6 +127,18 @@ def main():
     test_size = args.test_size if args.test_size is not None else cfg["training"]["test_size"]
     random_state = args.random_state if args.random_state is not None else cfg["training"]["random_state"]
     model_params = cfg["model"]["params"]
+    # --experiment-name lets you keep a batch of runs apart from the main
+    # history without editing the config.
+    experiment_name = args.experiment_name or cfg["mlflow"]["experiment_name"]
+
+    # --- MLflow setup ---
+    # The tracking URI says where MLflow stores run data. sqlite:///mlflow.db
+    # is a local database file in the project root; model files go under
+    # mlruns/. set_experiment() selects the experiment (a named group of
+    # runs) and creates it if it does not exist yet. Both calls must come
+    # before start_run(), or the run would go to the default location.
+    mlflow.set_tracking_uri(cfg["mlflow"]["tracking_uri"])
+    mlflow.set_experiment(experiment_name)
 
     # Load processed data
     print(f"Loading data from {data_path} ...")
@@ -134,28 +158,67 @@ def main():
         X, y, test_size=test_size, random_state=random_state, stratify=y
     )
 
-    # Build and train pipeline.
-    # fit() runs the steps in order on the training data: the scaler learns
-    # the training mean and standard deviation and scales X_train, then the
-    # classifier is fitted on the scaled result.
-    print("Training pipeline ...")
-    pipeline = build_pipeline(num_cols, model_params)
-    pipeline.fit(X_train, y_train)
+    # Everything inside this "with" block is recorded as one MLflow run.
+    # The run is closed automatically when the block ends, even on an error.
+    with mlflow.start_run():
+        # Log parameters: the settings we chose before training. They show
+        # up as columns in the MLflow UI, so runs can be filtered and sorted.
+        mlflow.log_param("test_size", test_size)
+        mlflow.log_param("random_state", random_state)
+        mlflow.log_param("model", cfg["model"]["name"])
+        # One parameter per hyperparameter, prefixed "model_" so they do not
+        # clash with the names above (for example model_random_state).
+        for k, v in model_params.items():
+            mlflow.log_param(f"model_{k}", v)
 
-    # Quick evaluation on test set (yhat = predicted labels).
-    # predict() scales X_test with the training statistics stored inside the
-    # pipeline, then classifies. The test set is never used for fitting.
-    yhat = pipeline.predict(X_test)
-    print(f"Test accuracy: {accuracy_score(y_test, yhat):.4f}")
-    print(classification_report(y_test, yhat))
+        # Train.
+        # fit() runs the steps in order on the training data: the scaler
+        # learns the training mean and standard deviation and scales X_train,
+        # then the classifier is fitted on the scaled result.
+        print("Training pipeline ...")
+        pipeline = build_pipeline(num_cols, model_params)
+        pipeline.fit(X_train, y_train)
 
-    # Save the entire pipeline.
-    # One object now holds both the fitted scaler and the model, so there is
-    # no separate scaler to keep in step. pickle serialises Python objects to
-    # bytes; "wb" opens the file for writing bytes.
-    with open(model_path, "wb") as f:
-        pickle.dump(pipeline, f)
-    print(f"Pipeline saved to {model_path}")
+        # Evaluate on the test set (yhat = predicted labels).
+        # F1 balances precision and recall for the churn class. It is more
+        # informative than accuracy here, because churners are the minority
+        # and a model that rarely predicts churn can still score high
+        # accuracy.
+        yhat = pipeline.predict(X_test)
+        acc = accuracy_score(y_test, yhat)
+        f1 = f1_score(y_test, yhat)
+        print(f"Test accuracy: {acc:.4f}")
+        print(f"Test F1:       {f1:.4f}")
+        print(classification_report(y_test, yhat))
+
+        # Log metrics: the results we measured after training.
+        mlflow.log_metric("accuracy", acc)
+        mlflow.log_metric("f1_score", f1)
+
+        # Log the model. MLflow saves scikit-learn models in the safe "skops"
+        # format, which only loads object types it has been told to trust.
+        # We trained this pipeline ourselves, so we trust every type in it.
+        # dumps() serialises the pipeline in memory, and get_untrusted_types()
+        # lists the types skops would refuse (for example the internal Tree
+        # object inside gradient boosting). Without skops_trusted_types the
+        # log_model call fails with an "untrusted types" error.
+        # name="model" is the model's name inside the run, so it can be loaded
+        # later as "runs:/<run-id>/model". (MLflow 3 uses name=; the older
+        # positional artifact_path still works but prints a warning.)
+        trusted_types = get_untrusted_types(data=dumps(pipeline))
+        mlflow.sklearn.log_model(
+            pipeline, name="model", skops_trusted_types=trusted_types
+        )
+
+        # Also save locally.
+        # evaluate.py and predict.py still load models/model.pkl with pickle,
+        # so we keep writing it next to the MLflow copy. Unlike skops, pickle
+        # loads any object type, so only open pickle files you trust.
+        with open(model_path, "wb") as f:
+            pickle.dump(pipeline, f)
+        print(f"Pipeline saved to {model_path}")
+        print(f"MLflow run logged to {mlflow.get_tracking_uri()} "
+              f"(experiment: {experiment_name})")
 
 
 # Run main() only when executed as a script, not when imported.

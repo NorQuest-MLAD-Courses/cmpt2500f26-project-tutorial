@@ -40,9 +40,19 @@ training:
 model:
   # Name of the classifier that train.py uses. The class itself is created
   # in train.py's build_pipeline(); this value records which one it is.
+  # train.py also logs it to MLflow as the "model" parameter.
   name: GradientBoostingClassifier
   # Keyword arguments passed to the classifier when it is created
   # (GradientBoostingClassifier(**params)).
   params:
     # Seed for the model's own randomness, again for reproducible results.
     random_state: 40
+
+# MLflow experiment tracking.
+mlflow:
+  # Where runs are recorded: a SQLite database file. With three slashes the
+  # path is relative, so this is mlflow.db in the project root. View the
+  # runs with `make mlflow-ui`.
+  tracking_uri: sqlite:///mlflow.db
+  # Runs are grouped under this experiment name in the MLflow UI.
+  experiment_name: churn-prediction

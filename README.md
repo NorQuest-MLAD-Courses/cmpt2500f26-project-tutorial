@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, and YAML configuration.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, and experiment tracking with MLflow.
 
 ## Contents
 
@@ -11,6 +11,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Testing](#testing)
+- [Experiment tracking (MLflow)](#experiment-tracking-mlflow)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -47,7 +48,7 @@ Run the pipeline stages in order:
 
 ```bash
 make preprocess  # clean data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv -> data/processed/churn_processed.csv
-make train       # train a pipeline -> models/model.pkl
+make train       # train a pipeline -> models/model.pkl (+ MLflow run)
 make evaluate    # accuracy, classification report and confusion matrix on the test split
 make predict     # predictions for the rows of the processed CSV
 ```
@@ -57,7 +58,7 @@ make predict     # predictions for the rows of the processed CSV
 Every script reads `config/default.yaml` (or the file given with `--config`). Options left out fall back to the config file, so a flag only overrides one setting for one run. Example:
 
 ```bash
-.venv/bin/python src/train.py --test-size 0.25 --random-state 7
+.venv/bin/python src/train.py --test-size 0.25 --random-state 7 --experiment-name feature-test
 ```
 
 `src/preprocess.py`:
@@ -77,6 +78,7 @@ Every script reads `config/default.yaml` (or the file given with `--config`). Op
 | `--model-out` | from config | Override model output path |
 | `--test-size` | from config | Override the test-set fraction from the config |
 | `--random-state` | from config | Override the random seed from the config |
+| `--experiment-name` | from config | Override the MLflow experiment name from the config |
 
 `src/evaluate.py`:
 
@@ -110,6 +112,8 @@ Settings live in `config/default.yaml`:
 | `training.random_state` | `40` |
 | `model.name` | `GradientBoostingClassifier` |
 | `model.params.random_state` | `40` |
+| `mlflow.tracking_uri` | `sqlite:///mlflow.db` |
+| `mlflow.experiment_name` | `churn-prediction` |
 
 To try different settings, copy the file (for example to `config/experiment.yaml`), edit the copy, and pass it with `--config config/experiment.yaml`. Committing the copy keeps a record of the experiment.
 
@@ -124,6 +128,21 @@ Runs 7 tests with pytest (configured in `pytest.ini`):
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 1 test. Minimal tests for the training module.
+
+## Experiment tracking (MLflow)
+
+Every run of `train.py` is logged to MLflow: parameters, metrics (accuracy and F1) and the trained pipeline as an MLflow logged model.
+
+- Run metadata goes to the SQLite database `mlflow.db`; model files go to `mlruns/`. Both are git-ignored.
+- Runs are grouped by experiment: `churn-prediction` (from `config/default.yaml`). Use `--experiment-name <name>` to log a run to a different experiment.
+
+Browse the runs with:
+
+```bash
+make mlflow-ui
+```
+
+and open http://127.0.0.1:5000 (in Codespaces, use the forwarded port 5000 in the Ports tab).
 
 ## Project structure
 
@@ -145,7 +164,7 @@ Runs 7 tests with pytest (configured in `pytest.ini`):
 │   ├── evaluate.py                                  # Load a saved pipeline and evaluate it on the test split
 │   ├── predict.py                                   # Load a saved pipeline and print predictions for new data
 │   ├── preprocess.py                                # Load raw data, clean it, encode categoricals, and save processed data
-│   └── train.py                                     # Load processed data, split, train a pipeline, and save it to disk
+│   └── train.py                                     # Load processed data, split, train a pipeline, save it, and log to MLflow
 ├── tests/
 │   ├── test_config.py                               # Tests for the config loader
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
@@ -169,6 +188,7 @@ Runs 7 tests with pytest (configured in `pytest.ini`):
 | `make evaluate` | Loads the saved model and prints its scores on the test split. |
 | `make predict` | Loads the saved model and makes predictions for new customers. |
 | `make test` | Runs the automated tests in tests/ with pytest (settings in pytest.ini). |
+| `make mlflow-ui` | Opens the MLflow web interface so you can browse and compare runs. |
 | `make clean` | Deletes generated files so you can start again from a clean state. |
 
 ## References
@@ -181,5 +201,7 @@ Runs 7 tests with pytest (configured in `pytest.ini`):
 - [pytest documentation](https://docs.pytest.org/)
 - [argparse (command-line options)](https://docs.python.org/3/library/argparse.html)
 - [PyYAML documentation](https://pyyaml.org/wiki/PyYAMLDocumentation)
+- [MLflow Tracking](https://mlflow.org/docs/latest/ml/tracking/)
+- [skops (safe scikit-learn model persistence used by MLflow)](https://skops.readthedocs.io/en/stable/)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.

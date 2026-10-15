@@ -27,3 +27,9 @@ models/*.pkl
 # ---- Data ----
 # Processed data is generated from the raw CSV by `make preprocess`.
 data/processed/
+
+# ---- Experiment tracking (MLflow) ----
+# MLflow's local tracking database (SQLite) and its folder of saved run
+# artifacts. They are generated on every run and grow quickly.
+mlflow.db
+mlruns/

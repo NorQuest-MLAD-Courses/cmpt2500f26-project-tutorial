@@ -16,6 +16,15 @@ scikit-learn
 # pyyaml: reads the settings in config/default.yaml (imported as `yaml`).
 pyyaml
 
+# ---- Experiment tracking ----
+# mlflow: records parameters, metrics and models for every training run,
+# and provides the web UI (`make mlflow-ui`) for comparing them.
+mlflow
+# skops: a safe file format for scikit-learn models. MLflow saves sklearn
+# models with skops so that loading a model does not run arbitrary code,
+# which loading a pickle file can do.
+skops
+
 # ---- Testing ----
 # pytest: finds and runs the tests in tests/ (`make test`).
 pytest

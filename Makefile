@@ -17,7 +17,7 @@
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: venv preprocess train evaluate predict test clean
+.PHONY: venv preprocess train evaluate predict test mlflow-ui clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -54,10 +54,20 @@ predict:
 test:
 	.venv/bin/pytest
 
+# make mlflow-ui
+# Opens the MLflow web interface so you can browse and compare runs.
+# --backend-store-uri points it at the same SQLite file the training code
+# writes to: sqlite:///mlflow.db (three slashes = a path relative to the
+# current folder). Without it the UI would look in the wrong place and show
+# no runs. Stop it with Ctrl+C.
+mlflow-ui:
+	.venv/bin/mlflow ui --backend-store-uri sqlite:///mlflow.db
+
 # make clean
 # Deletes generated files so you can start again from a clean state:
 #   .venv              the virtual environment (recreate it with `make venv`)
 #   models/*.pkl       saved models (recreate them with `make train`)
 #   data/processed/*.csv  processed data (recreate it with `make preprocess`)
+#   mlflow.db mlruns/  the local MLflow tracking database and artifact folder
 clean:
-	rm -rf .venv models/*.pkl data/processed/*.csv
+	rm -rf .venv models/*.pkl data/processed/*.csv mlflow.db mlruns/
