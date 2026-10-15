@@ -28,3 +28,10 @@ skops
 # ---- Testing ----
 # pytest: finds and runs the tests in tests/ (`make test`).
 pytest
+
+# ---- Data version control ----
+# dvc: versions large data and model files outside Git (`dvc add`, push, pull).
+dvc
+# dvc-s3: lets DVC talk to S3-compatible storage. DagsHub's DVC remote uses
+# the S3 API, so DVC needs this plug-in to push and pull.
+dvc-s3
