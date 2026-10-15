@@ -1,5 +1,21 @@
+# Python packages this project needs. Install them into the virtual
+# environment with `make venv` (which runs pip install -r requirements.txt).
+# One package per line. A line can pin a version (for example pandas==2.2.3);
+# here we leave versions unpinned so pip installs the latest release.
+# Lines that start with # are comments and pip ignores them.
+
+# ---- Data handling and machine learning ----
+# pandas: reads the CSV file and holds the data in DataFrames.
 pandas
+# numpy: fast numerical arrays; pandas and scikit-learn are built on it.
 numpy
+# scikit-learn: preprocessing, models, pipelines and evaluation metrics.
 scikit-learn
+
+# ---- Configuration ----
+# pyyaml: reads the settings in config/default.yaml (imported as `yaml`).
 pyyaml
+
+# ---- Testing ----
+# pytest: finds and runs the tests in tests/ (`make test`).
 pytest

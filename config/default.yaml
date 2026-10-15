@@ -1,21 +1,48 @@
 # Default configuration for the churn prediction project.
+#
+# Settings live here instead of being hard-coded in the scripts, so you can
+# change a path or a hyperparameter without editing Python code.
+# src/utils/config.py loads this file with yaml.safe_load() and returns a
+# nested dictionary, so a script reads a value as, for example,
+# cfg["training"]["test_size"]. Command-line arguments, when given,
+# override the values here.
+# YAML basics: "key: value" pairs, nesting by indentation (spaces, never
+# tabs), and "- item" for list entries.
 
+# File locations, relative to the project root (run scripts from there).
 paths:
+  # The original Telco customer-churn CSV that preprocess.py reads.
   raw_data: data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv
+  # The cleaned, encoded data that preprocess.py writes and the other
+  # scripts read.
   processed_data: data/processed/churn_processed.csv
+  # Where train.py saves the trained model and evaluate.py/predict.py load it.
   model: models/model.pkl
 
+# Column groups used when building the model pipeline.
 features:
+  # Numerical columns; the pipeline scales these. All other columns are the
+  # already-encoded categorical features.
   numerical:
     - tenure
     - MonthlyCharges
     - TotalCharges
 
+# How the data is split for training and testing.
 training:
+  # Fraction of the rows held back as the test set (0.30 = 30%).
   test_size: 0.30
+  # Seed for the random split. A fixed value gives the same split on every
+  # run, so results can be reproduced and compared.
   random_state: 40
 
+# The model to train.
 model:
+  # Name of the classifier that train.py uses. The class itself is created
+  # in train.py's build_pipeline(); this value records which one it is.
   name: GradientBoostingClassifier
+  # Keyword arguments passed to the classifier when it is created
+  # (GradientBoostingClassifier(**params)).
   params:
+    # Seed for the model's own randomness, again for reproducible results.
     random_state: 40
