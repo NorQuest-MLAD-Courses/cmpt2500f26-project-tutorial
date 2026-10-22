@@ -145,9 +145,9 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 9 tests with pytest (configured in `pytest.ini`):
+Runs 14 tests with pytest (configured in `pytest.ini`):
 
-- `tests/test_api.py`: 2 tests. Automated tests for the Flask API endpoints.
+- `tests/test_api.py`: 7 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 1 test. Minimal tests for the training module.
@@ -194,7 +194,8 @@ It listens on http://127.0.0.1:5000.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Return a simple status check |
-| POST | `/v1/predict` | Accept customer data as JSON, return a churn prediction from model v1 |
+| POST | `/v1/predict` | Predict churn using model v1 |
+| POST | `/v2/predict` | Predict churn using model v2 |
 
 Example request:
 
@@ -209,6 +210,8 @@ Response:
 ```json
 {"prediction": "No", "probability": 0.94, "model_version": "v1"}
 ```
+
+Send a JSON list of customers instead of one object to get a list of predictions. Missing fields, wrong types or an empty body return HTTP 400 with an `error` message.
 
 ## Project structure
 

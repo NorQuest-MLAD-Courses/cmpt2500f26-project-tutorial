@@ -9,7 +9,8 @@ back responses. Each URL the server answers is called a *route* or
 Endpoints:
 
     GET  /health      ->  {"status": "ok"}
-    POST /v1/predict  ->  churn prediction for one customer, from model v1
+    POST /v1/predict  ->  churn prediction(s) from model v1
+    POST /v2/predict  ->  churn prediction(s) from model v2
 
 When the module is loaded it reads two trained pipelines,
 models/model_v1.pkl and models/model_v2.pkl, from disk. Both are complete
@@ -17,9 +18,12 @@ scikit-learn pipelines produced by the tuning step, so they accept cleaned
 but unencoded customer data: the same column names and text values as the
 raw CSV.
 
-Input:  a JSON object with one customer's features (see REQUIRED_FEATURES).
-Output: JSON with the predicted label ("Yes"/"No"), the probability of that
-        label, and the model version that produced it.
+Input:  a JSON object with one customer's features (see REQUIRED_FEATURES),
+        or a JSON array of such objects for a batch prediction.
+Output: for each customer, JSON with the predicted label ("Yes"/"No"), the
+        probability of that label, and the model version that produced it.
+        A batch request gets a JSON array back. Invalid input gets a JSON
+        error message with status 400.
 
 How to run (from the project root):
 
@@ -85,6 +89,95 @@ CATEGORICAL_FEATURES = [
 REQUIRED_FEATURES = NUMERICAL_FEATURES + CATEGORICAL_FEATURES
 
 
+# ---- Validation ----
+# Checking the input before it reaches the model means a client with a
+# mistake (a missing field, a number sent as text) gets a clear message that
+# names the problem, instead of a vague error from deep inside scikit-learn.
+
+def validate_input(record):
+    """
+    Check that a single record has all required features with correct types.
+    Returns (error_message, status_code) or (None, 200) if valid.
+    """
+    # Collect every missing feature, not just the first, so the client can
+    # fix them all in one go.
+    missing = [f for f in REQUIRED_FEATURES if f not in record]
+    if missing:
+        # 400 Bad Request: the client sent incomplete data.
+        return f"Missing required features: {', '.join(missing)}", 400
+
+    # Numeric features must be JSON numbers (Python int or float), not text
+    # such as "12".
+    for feat in NUMERICAL_FEATURES:
+        if not isinstance(record[feat], (int, float)):
+            # type(...).__name__ gives a readable name such as "str".
+            return (f"Invalid type for {feat}: expected a number, "
+                    f"got {type(record[feat]).__name__}"), 400
+
+    # Categorical features must be strings such as "Yes" or "One year".
+    for feat in CATEGORICAL_FEATURES:
+        if not isinstance(record[feat], str):
+            return (f"Invalid type for {feat}: expected a string, "
+                    f"got {type(record[feat]).__name__}"), 400
+
+    # No problems found. 200 means OK; the caller only checks `error`.
+    return None, 200
+
+
+# ---- Prediction helper ----
+# Both /v1/predict and /v2/predict need the same steps (validate, predict,
+# format the answer). Keeping them in one function means the two endpoints
+# differ only in which model they pass in.
+
+def run_prediction(model, model_label, json_data):
+    """
+    Validate, predict, and format results.
+    Handles both single records and batches.
+    """
+    # Batch support: the client may send one JSON object (a dict) or a JSON
+    # array of objects (a list). We turn both into a list of records so the
+    # rest of the function has a single code path, and remember which form
+    # came in so the reply has the same shape.
+    is_batch = isinstance(json_data, list)
+    records = json_data if is_batch else [json_data]
+
+    # Validate every record before touching the model
+    # If any record is invalid, the whole request is rejected and no
+    # predictions are returned.
+    for record in records:
+        error, status = validate_input(record)
+        if error:
+            return jsonify({"error": error}), status
+
+    # Build one DataFrame row per record, keep only the model's columns in
+    # training order, and predict all rows in one call (faster than looping).
+    # Any unexpected failure becomes a JSON error with status 500
+    # (Internal Server Error), since the input already passed validation.
+    try:
+        input_df = pd.DataFrame(records)[REQUIRED_FEATURES]
+        yhat = model.predict(input_df)
+        # predict_proba returns one row per record and one column per class:
+        # proba[i] is [P(class 0 = "No"), P(class 1 = "Yes")] for record i.
+        proba = model.predict_proba(input_df)
+    except Exception as e:
+        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+
+    # Build one result per record. yhat[i] is the predicted class (0 or 1);
+    # using it as the column index, proba[i][yhat[i]] is the probability of
+    # the predicted class. float() converts the NumPy number to a plain
+    # Python float, which jsonify can serialise.
+    results = []
+    for i in range(len(yhat)):
+        results.append({
+            "prediction": "Yes" if yhat[i] == 1 else "No",
+            "probability": float(proba[i][yhat[i]]),
+            "model_version": model_label,
+        })
+
+    # A batch request gets a list back; a single record gets a single object.
+    return jsonify(results if is_batch else results[0])
+
+
 # ---- Endpoints ----
 
 # The @app.route decorator connects a URL path and HTTP method to the Python
@@ -102,7 +195,7 @@ def health():
 # body of the request.
 @app.route("/v1/predict", methods=["POST"])
 def predict_v1():
-    """Accept customer data as JSON, return a churn prediction from model v1."""
+    """Predict churn using model v1."""
     # Parse the request body as JSON. With silent=True, an empty or malformed
     # body gives None instead of raising an error that Flask would turn into
     # an HTML error page, so we can reply with our own JSON error message.
@@ -110,30 +203,19 @@ def predict_v1():
     if not json_data:
         # 400 Bad Request: the problem is in what the client sent.
         return jsonify({"error": "No input data provided"}), 400
+    return run_prediction(model_v1, "v1", json_data)
 
-    # Convert to DataFrame (single row)
-    input_df = pd.DataFrame([json_data])
 
-    # Select the columns in training order and run the model. If something
-    # goes wrong (for example a missing column), return the error as JSON
-    # with status 500 (Internal Server Error) instead of crashing.
-    try:
-        yhat = model_v1.predict(input_df[REQUIRED_FEATURES])
-        # predict_proba returns one row per record and one column per class:
-        # proba[0] is [P(class 0 = "No"), P(class 1 = "Yes")] for the first row.
-        proba = model_v1.predict_proba(input_df[REQUIRED_FEATURES])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-    # yhat[0] is the predicted class (0 or 1) for our single row. Using it as
-    # the column index, proba[0][yhat[0]] is the probability of the predicted
-    # class. float() converts the NumPy number to a plain Python float, which
-    # jsonify can serialise.
-    return jsonify({
-        "prediction": "Yes" if yhat[0] == 1 else "No",
-        "probability": float(proba[0][yhat[0]]),
-        "model_version": "v1",
-    })
+# API versioning: /v2/predict serves the second model. Existing clients keep
+# calling /v1/predict and get the same behaviour, while new clients can move
+# to v2 when they are ready. The code matches predict_v1 except for the model.
+@app.route("/v2/predict", methods=["POST"])
+def predict_v2():
+    """Predict churn using model v2."""
+    json_data = request.get_json(silent=True)
+    if not json_data:
+        return jsonify({"error": "No input data provided"}), 400
+    return run_prediction(model_v2, "v2", json_data)
 
 
 # This block runs only when the file is executed directly
