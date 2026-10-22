@@ -145,9 +145,9 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 8 tests with pytest (configured in `pytest.ini`):
+Runs 9 tests with pytest (configured in `pytest.ini`):
 
-- `tests/test_api.py`: 1 test. Automated tests for the Flask API endpoints.
+- `tests/test_api.py`: 2 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 1 test. Minimal tests for the training module.
@@ -194,6 +194,21 @@ It listens on http://127.0.0.1:5000.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/health` | Return a simple status check |
+| POST | `/v1/predict` | Accept customer data as JSON, return a churn prediction from model v1 |
+
+Example request:
+
+```bash
+curl -X POST http://127.0.0.1:5000/v1/predict \
+  -H "Content-Type: application/json" \
+  -d '{"tenure": 12, "MonthlyCharges": 59.95, "TotalCharges": 720.5, "Contract": "One year", "PaymentMethod": "Electronic check", "OnlineSecurity": "No", "TechSupport": "No", "InternetService": "DSL", "gender": "Female", "SeniorCitizen": "No", "Partner": "Yes", "Dependents": "No", "PhoneService": "Yes", "MultipleLines": "No", "PaperlessBilling": "Yes", "OnlineBackup": "Yes", "DeviceProtection": "No", "StreamingTV": "No", "StreamingMovies": "No"}'
+```
+
+Response:
+
+```json
+{"prediction": "No", "probability": 0.94, "model_version": "v1"}
+```
 
 ## Project structure
 

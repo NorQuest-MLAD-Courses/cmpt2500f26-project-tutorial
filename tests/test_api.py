@@ -11,6 +11,11 @@ Run from the project root with:
     pytest
 
 Each test sends one request and checks the status code and the JSON body.
+
+Importing src.app loads the trained models from models/model_v1.pkl and
+models/model_v2.pkl, so those files must be present (for example after
+`dvc pull`) before the tests run. The prediction tests use real models but
+a made-up customer (VALID_PAYLOAD below).
 """
 
 import pytest
@@ -37,6 +42,35 @@ def client():
         yield client
 
 
+# A valid customer payload for reuse across tests
+# One customer with every feature the API requires, using the same column
+# names and raw text values as the original CSV. Tests send it as the JSON
+# body of a request, or change a copy of it to make invalid input. The values
+# are made up; the tests only check the shape of the response, not whether
+# the model predicts churn for this customer.
+VALID_PAYLOAD = {
+    "tenure": 12,
+    "MonthlyCharges": 59.95,
+    "TotalCharges": 720.50,
+    "Contract": "One year",
+    "PaymentMethod": "Electronic check",
+    "OnlineSecurity": "No",
+    "TechSupport": "No",
+    "InternetService": "DSL",
+    "gender": "Female",
+    "SeniorCitizen": "No",
+    "Partner": "Yes",
+    "Dependents": "No",
+    "PhoneService": "Yes",
+    "MultipleLines": "No",
+    "PaperlessBilling": "Yes",
+    "OnlineBackup": "Yes",
+    "DeviceProtection": "No",
+    "StreamingTV": "No",
+    "StreamingMovies": "No",
+}
+
+
 # ---- Step 9: Health ----
 
 def test_health(client):
@@ -45,3 +79,18 @@ def test_health(client):
     assert response.status_code == 200
     # response.json parses the JSON body into a Python dict.
     assert response.json["status"] == "ok"
+
+
+# ---- Step 10: v1 single prediction ----
+
+def test_v1_single_prediction(client):
+    """POST /v1/predict with valid data returns a prediction."""
+    # json=... serialises the dict to JSON and sets the
+    # Content-Type: application/json header, as a real client would.
+    response = client.post("/v1/predict", json=VALID_PAYLOAD)
+    assert response.status_code == 200
+    assert "prediction" in response.json
+    assert "probability" in response.json
+    assert response.json["model_version"] == "v1"
+    # The label must be one of the two strings the API promises.
+    assert response.json["prediction"] in ("Yes", "No")
