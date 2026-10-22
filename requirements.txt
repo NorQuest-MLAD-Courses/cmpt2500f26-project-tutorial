@@ -39,3 +39,5 @@ dvc-s3
 # ---- Web API ----
 # flask: the web framework for the prediction API in src/app.py.
 flask
+# flasgger: generates the Swagger/OpenAPI documentation page for the Flask API.
+flasgger

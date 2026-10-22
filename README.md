@@ -145,9 +145,9 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 14 tests with pytest (configured in `pytest.ini`):
+Runs 15 tests with pytest (configured in `pytest.ini`):
 
-- `tests/test_api.py`: 7 tests. Automated tests for the Flask API endpoints.
+- `tests/test_api.py`: 8 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 1 test. Minimal tests for the training module.
@@ -193,9 +193,11 @@ It listens on http://127.0.0.1:5000.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/health` | Return a simple status check |
+| GET | `/health` | Health Check |
+| GET | `/info` | API Information |
 | POST | `/v1/predict` | Predict churn using model v1 |
 | POST | `/v2/predict` | Predict churn using model v2 |
+| GET | `/apidocs/` | Interactive Swagger UI (generated from the route docstrings) |
 
 Example request:
 
@@ -290,5 +292,6 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [DVC documentation](https://doc.dvc.org/)
 - [DagsHub storage](https://dagshub.com/docs/feature_guide/dagshub_storage/)
 - [Flask documentation](https://flask.palletsprojects.com/)
+- [Flasgger (Swagger UI for Flask)](https://github.com/flasgger/flasgger)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.
