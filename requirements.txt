@@ -35,3 +35,7 @@ dvc
 # dvc-s3: lets DVC talk to S3-compatible storage. DagsHub's DVC remote uses
 # the S3 API, so DVC needs this plug-in to push and pull.
 dvc-s3
+
+# ---- Web API ----
+# flask: the web framework for the prediction API in src/app.py.
+flask

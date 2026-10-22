@@ -22,7 +22,7 @@ SHELL := /bin/bash
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: setup venv preprocess train tune evaluate predict test mlflow-ui dvc-push dvc-pull clean
+.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -121,6 +121,12 @@ predict:
 # Run it after every change; all tests should pass before you commit.
 test:
 	.venv/bin/pytest
+
+# make api
+# Starts the Flask API on your machine (outside Docker) for quick testing.
+# Stop it with Ctrl+C.
+api:
+	.venv/bin/python src/app.py
 
 # make mlflow-ui
 # Opens the MLflow web interface so you can browse and compare runs.

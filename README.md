@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, and a hyperparameter search that produces two deployment-ready models.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, and a Flask REST API that serves both models.
 
 ## Contents
 
@@ -13,6 +13,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [Testing](#testing)
 - [Experiment tracking (MLflow)](#experiment-tracking-mlflow)
 - [Data versioning (DVC)](#data-versioning-dvc)
+- [REST API](#rest-api)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -144,11 +145,14 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 7 tests with pytest (configured in `pytest.ini`):
+Runs 8 tests with pytest (configured in `pytest.ini`):
 
+- `tests/test_api.py`: 1 test. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 1 test. Minimal tests for the training module.
+
+The API tests load `models/model_v1.pkl` and `models/model_v2.pkl`, so get the models first (`make dvc-pull` or `make tune`).
 
 ## Experiment tracking (MLflow)
 
@@ -164,6 +168,7 @@ make mlflow-ui
 ```
 
 and open http://127.0.0.1:5000 (in Codespaces, use the forwarded port 5000 in the Ports tab).
+The API also uses port 5000, so stop one before starting the other.
 
 ## Data versioning (DVC)
 
@@ -175,6 +180,20 @@ make dvc-push     # upload new versions after `dvc add`
 ```
 
 Your DagsHub credentials live in `.dvc/config.local`, which is git-ignored. In a new Codespace, run `make setup` (or the two `dvc remote modify origin --local` commands) to restore them.
+
+## REST API
+
+Start the development server:
+
+```bash
+make api
+```
+
+It listens on http://127.0.0.1:5000.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Return a simple status check |
 
 ## Project structure
 
@@ -199,12 +218,14 @@ Your DagsHub credentials live in `.dvc/config.local`, which is git-ignored. In a
 │   ├── utils/
 │   │   ├── __init__.py                              # Marks the folder as a Python package
 │   │   └── config.py                                # Load a YAML configuration file and return it as a dictionary
+│   ├── app.py                                       # Flask REST API for the churn prediction service
 │   ├── evaluate.py                                  # Load a saved pipeline and evaluate it on the test split
 │   ├── predict.py                                   # Load a saved pipeline and print predictions for new data
 │   ├── preprocess.py                                # Load raw data, clean it, encode categoricals, and save processed data
 │   ├── train.py                                     # Load processed data, split, train a pipeline, save it, and log to MLflow
 │   └── tune.py                                      # Hyperparameter search across model families
 ├── tests/
+│   ├── test_api.py                                  # Automated tests for the Flask API endpoints
 │   ├── test_config.py                               # Tests for the config loader
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
 │   └── test_train.py                                # Minimal tests for the training module
@@ -230,6 +251,7 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 | `make evaluate` | Loads the saved model and prints its scores on the test split. |
 | `make predict` | Loads the saved model and makes predictions for new customers. |
 | `make test` | Runs the automated tests in tests/ with pytest (settings in pytest.ini). |
+| `make api` | Starts the Flask API on your machine (outside Docker) for quick testing. |
 | `make mlflow-ui` | Opens the MLflow web interface so you can browse and compare runs. |
 | `make dvc-push` | Uploads DVC-tracked files to the DagsHub remote. |
 | `make dvc-pull` | Downloads the DVC-tracked files that match the current .dvc files in Git. |
@@ -249,5 +271,6 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [skops (safe scikit-learn model persistence used by MLflow)](https://skops.readthedocs.io/en/stable/)
 - [DVC documentation](https://doc.dvc.org/)
 - [DagsHub storage](https://dagshub.com/docs/feature_guide/dagshub_storage/)
+- [Flask documentation](https://flask.palletsprojects.com/)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.
