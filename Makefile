@@ -22,7 +22,7 @@ SHELL := /bin/bash
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: setup venv preprocess train evaluate predict test mlflow-ui dvc-push dvc-pull clean
+.PHONY: setup venv preprocess train tune evaluate predict test mlflow-ui dvc-push dvc-pull clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -37,24 +37,53 @@ venv:
 # One-command setup for a fresh clone or a new Codespace.
 # "setup: venv" means setup depends on venv: Make runs the venv target first,
 # then the commands below.
-# The two `read -s -p` commands prompt for your DagsHub credentials. -p shows
-# the prompt text and -s hides what you type, so the keys never appear on
-# screen or in your shell history. "$$KEY_ID" is how a Makefile writes the
-# shell variable $KEY_ID (Make itself would expand a single $).
-# The commands are joined with `&& \` so they run in ONE shell; otherwise the
-# variables set by `read` would be lost before `dvc remote modify` runs.
-# `dvc remote modify origin --local ...` stores the keys in .dvc/config.local,
-# which is git-ignored, so your secrets never end up in Git. The non-secret
-# remote settings live in .dvc/config, which is committed.
-# Finally `dvc pull` downloads the DVC-tracked files.
 # A leading @ on a recipe line stops Make from printing the command itself;
 # only its output is shown.
+#
+# 1. Endpoint check. DagsHub's repository page shows two different S3
+#    endpoints. DVC needs https://dagshub.com/<user>/<repo>.s3; the one in the
+#    "S3 Connection Credentials" panel (.../api/v1/repo-buckets/s3/<user>) is
+#    for the "Use as S3" bucket and makes `dvc pull` fail with a 404. We stop
+#    early with a clear message if .dvc/config has that one. `exit 1` makes
+#    the target fail, so Make does not run the steps after it.
+# 2. Token. DagsHub uses the same token as both the access key ID and the
+#    secret access key, so we ask for it once and store it in both places.
+#    `read -s -p` shows the prompt (-p) and hides what you type or paste
+#    (-s), so the token never appears on screen or in your shell history.
+#    "$$TOKEN" is how a Makefile writes the shell variable $TOKEN (Make itself
+#    would expand a single $). $$STORED holds the token that is already in
+#    .dvc/config.local, or nothing if there is none. If one is stored (you
+#    ran setup before in this Codespace), pressing Enter keeps it; pasting a
+#    new token replaces it.
+#    The lines are joined with `\` so they run in ONE shell; otherwise the
+#    variable set by `read` would be lost before `dvc remote modify` runs.
+#    `dvc remote modify origin --local ...` stores the token in
+#    .dvc/config.local, which is git-ignored, so it never ends up in Git. The
+#    non-secret remote settings live in .dvc/config, which is committed.
+# 3. Finally `dvc pull` downloads the DVC-tracked files.
 setup: venv
+	@if .venv/bin/dvc config remote.origin.endpointurl \
+			| grep -q "repo-buckets"; then \
+		echo "ERROR: wrong DagsHub endpoint in .dvc/config."; \
+		echo "It must look like https://dagshub.com/<user>/<repo>.s3"; \
+		exit 1; \
+	fi
 	@echo "Configuring DVC remote credentials ..."
-	@read -s -p "DagsHub Access Key ID: " KEY_ID && echo "" && \
-	 read -s -p "DagsHub Secret Access Key: " SECRET_KEY && echo "" && \
-	 .venv/bin/dvc remote modify origin --local access_key_id "$$KEY_ID" && \
-	 .venv/bin/dvc remote modify origin --local secret_access_key "$$SECRET_KEY"
+	@STORED=$$(.venv/bin/dvc config --local \
+			remote.origin.access_key_id 2> /dev/null); \
+	if [ -n "$$STORED" ]; then \
+		echo "A token is already stored. Press Enter to keep it."; \
+	fi; \
+	read -s -p "DagsHub token: " TOKEN && echo "" && \
+	if [ -n "$$TOKEN" ]; then \
+		.venv/bin/dvc remote modify origin --local \
+			access_key_id "$$TOKEN" && \
+		.venv/bin/dvc remote modify origin --local \
+			secret_access_key "$$TOKEN"; \
+	elif [ -z "$$STORED" ]; then \
+		echo "No token entered. Run 'make setup' again."; \
+		exit 1; \
+	fi
 	@echo "Pulling data from DVC remote ..."
 	.venv/bin/dvc pull
 	@echo ""
@@ -69,6 +98,13 @@ preprocess:
 # Trains the model on the processed data and saves it in models/.
 train:
 	.venv/bin/python src/train.py
+
+# make tune
+# Runs the hyperparameter search in src/tune.py, logs every candidate to
+# MLflow and saves the two best pipelines as models/model_v1.pkl and
+# models/model_v2.pkl (the two API versions).
+tune:
+	.venv/bin/python src/tune.py
 
 # make evaluate
 # Loads the saved model and prints its scores on the test split.

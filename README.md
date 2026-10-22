@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, and data versioning with DVC and DagsHub.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, and a hyperparameter search that produces two deployment-ready models.
 
 ## Contents
 
@@ -40,7 +40,7 @@ Then run the one-command setup:
 make setup
 ```
 
-This creates the virtual environment in `.venv/`, installs `requirements.txt`, asks for your DagsHub access key and secret (stored only in the git-ignored `.dvc/config.local`), and runs `dvc pull` to download the data.
+This creates the virtual environment in `.venv/`, installs `requirements.txt`, asks once for your DagsHub token (stored only in the git-ignored `.dvc/config.local`), and runs `dvc pull` to download the data and the trained models.
 
 To recreate only the virtual environment, run `make venv`.
 
@@ -56,6 +56,16 @@ make train       # train a pipeline -> models/model.pkl (+ MLflow run)
 make evaluate    # accuracy, classification report and confusion matrix on the test split
 make predict     # predictions for the rows of the processed CSV
 ```
+
+### Hyperparameter tuning
+
+```bash
+make tune
+```
+
+Searches over gradient boosting, random forest and logistic regression settings, logs every candidate to MLflow (experiment `churn-tuning`), and saves the two best pipelines by F1 score as `models/model_v1.pkl` and `models/model_v2.pkl`. These pipelines include their own encoding, so they accept raw (cleaned, not encoded) customer data. The API serves them.
+
+The two models are tracked with DVC. After a new search you want to keep, run `.venv/bin/dvc add models/model_v1.pkl models/model_v2.pkl`, commit the two `.dvc` files and run `make dvc-push`.
 
 ### Command-line options
 
@@ -102,6 +112,13 @@ Every script reads `config/default.yaml` (or the file given with `--config`). Op
 | `--data` | from config | Override input data path |
 | `--model` | from config | Override model path |
 
+`src/tune.py`:
+
+| Option | Default | Description |
+|---|---|---|
+| `--config` | `config/default.yaml` | Path to YAML config file |
+| `--experiment-name` | `churn-tuning` | MLflow experiment to log the search runs to |
+
 ## Configuration
 
 Settings live in `config/default.yaml`:
@@ -135,10 +152,10 @@ Runs 7 tests with pytest (configured in `pytest.ini`):
 
 ## Experiment tracking (MLflow)
 
-Every run of `train.py` is logged to MLflow: parameters, metrics (accuracy and F1) and the trained pipeline as an MLflow logged model.
+Every run of `train.py` and every candidate in `tune.py` is logged to MLflow: parameters, metrics (accuracy and F1) and the trained pipeline as an MLflow logged model.
 
 - Run metadata goes to the SQLite database `mlflow.db`; model files go to `mlruns/`. Both are git-ignored.
-- Runs are grouped by experiment: `churn-prediction` (from `config/default.yaml`). Use `--experiment-name <name>` to log a run to a different experiment.
+- Runs are grouped by experiment: `churn-prediction` (from `config/default.yaml`) and `churn-tuning` (for `tune.py`). Use `--experiment-name <name>` to log a run to a different experiment.
 
 Browse the runs with:
 
@@ -150,7 +167,7 @@ and open http://127.0.0.1:5000 (in Codespaces, use the forwarded port 5000 in th
 
 ## Data versioning (DVC)
 
-Large files are versioned with [DVC](https://doc.dvc.org/) and stored on DagsHub; Git only keeps the small `.dvc` pointer files. Tracked with DVC: `data/raw/`, `data/processed/`.
+Large files are versioned with [DVC](https://doc.dvc.org/) and stored on DagsHub; Git only keeps the small `.dvc` pointer files. Tracked with DVC: `data/raw/`, `data/processed/`, `models/model_v1.pkl` and `models/model_v2.pkl`.
 
 ```bash
 make dvc-pull     # download the tracked files
@@ -174,6 +191,8 @@ Your DagsHub credentials live in `.dvc/config.local`, which is git-ignored. In a
 │   ├── processed.dvc                                # DVC pointer for data/processed/
 │   └── raw.dvc                                      # DVC pointer for data/raw/
 ├── models/                                          # trained models (`*.pkl` are git-ignored)
+│   ├── model_v1.pkl.dvc                             # DVC pointer for the best tuned model
+│   └── model_v2.pkl.dvc                             # DVC pointer for the second-best tuned model
 ├── notebooks/
 │   └── proof_of_concept.ipynb                       # Original proof-of-concept notebook
 ├── src/
@@ -183,7 +202,8 @@ Your DagsHub credentials live in `.dvc/config.local`, which is git-ignored. In a
 │   ├── evaluate.py                                  # Load a saved pipeline and evaluate it on the test split
 │   ├── predict.py                                   # Load a saved pipeline and print predictions for new data
 │   ├── preprocess.py                                # Load raw data, clean it, encode categoricals, and save processed data
-│   └── train.py                                     # Load processed data, split, train a pipeline, save it, and log to MLflow
+│   ├── train.py                                     # Load processed data, split, train a pipeline, save it, and log to MLflow
+│   └── tune.py                                      # Hyperparameter search across model families
 ├── tests/
 │   ├── test_config.py                               # Tests for the config loader
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
@@ -196,7 +216,7 @@ Your DagsHub credentials live in `.dvc/config.local`, which is git-ignored. In a
 └── requirements.txt                                 # Python dependencies
 ```
 
-Files under `data/` are downloaded with `make dvc-pull`.
+Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 
 ## Make targets
 
@@ -206,6 +226,7 @@ Files under `data/` are downloaded with `make dvc-pull`.
 | `make setup` | One-command setup for a fresh clone or a new Codespace. |
 | `make preprocess` | Cleans the raw CSV and writes the processed data to data/processed/. |
 | `make train` | Trains the model on the processed data and saves it in models/. |
+| `make tune` | Runs the hyperparameter search in src/tune.py, logs every candidate to MLflow and saves the two best pipelines as models/model_v1.pkl and models/model_v2.pkl (the two API versions). |
 | `make evaluate` | Loads the saved model and prints its scores on the test split. |
 | `make predict` | Loads the saved model and makes predictions for new customers. |
 | `make test` | Runs the automated tests in tests/ with pytest (settings in pytest.ini). |
