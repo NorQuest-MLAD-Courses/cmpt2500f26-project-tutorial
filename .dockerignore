@@ -1,0 +1,61 @@
+# .dockerignore lists files and folders that `docker build` must NOT send to
+# Docker. When you build, Docker first packs the whole folder (the "build
+# context") and sends it to the Docker engine. Excluding things we do not
+# need makes builds faster, keeps images small, and stops private files
+# from ending up inside an image that we may publish.
+# The patterns work like .gitignore patterns.
+# Reference: https://docs.docker.com/build/concepts/context/#dockerignore-files
+
+# Python
+# The local virtual environment and Python caches. The image installs its
+# own packages with pip, and a .venv built on your machine would not work
+# inside the container anyway.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data (not needed by the API)
+# The API only needs the trained models, not the training data.
+data/
+
+# Experiment tracking
+# Local MLflow runs and database. The MLflow container keeps its own.
+mlruns/
+mlflow.db
+
+# DVC
+# DVC's cache can be very large, and .dvc/config.local holds your access keys.
+.dvc/
+
+# Git
+# The Git history is not needed to run the code and can be large.
+.git/
+.gitignore
+
+# IDE
+# Editor settings.
+.vscode/
+
+# Docker (avoid recursive context)
+# The Docker and Compose files describe how to build and run images; the
+# running containers do not need them.
+Dockerfile
+Dockerfile.mlflow
+docker-compose.yml
+.dockerignore
+
+# Tests and config not needed at runtime
+# Tests and their settings, and the YAML config, are not used by the API at
+# run time. Run the tests on your machine with `make test`.
+tests/
+config/
+pytest.ini
+
+# Documentation
+# README and other Markdown documentation.
+*.md
+
+# Notebooks (exploration only, not needed at runtime)
+# The exploration notebook; the API runs from src/ only.
+notebooks/

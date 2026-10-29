@@ -41,3 +41,6 @@ dvc-s3
 flask
 # flasgger: generates the Swagger/OpenAPI documentation page for the Flask API.
 flasgger
+# gunicorn: a production web server that runs the Flask app inside the
+# Docker container. Flask's built-in server is meant for development only.
+gunicorn

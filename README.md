@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, and a Flask REST API that serves both models.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, and Docker images.
 
 ## Contents
 
@@ -14,6 +14,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [Experiment tracking (MLflow)](#experiment-tracking-mlflow)
 - [Data versioning (DVC)](#data-versioning-dvc)
 - [REST API](#rest-api)
+- [Docker](#docker)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -23,8 +24,9 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - Python 3.11 or newer
 - Git
 - A [DagsHub](https://dagshub.com/) account and repository (DVC remote storage)
+- Docker
 
-GitHub Codespaces provides Python and Git out of the box.
+GitHub Codespaces provides Python, Git and Docker out of the box.
 
 ## Setup
 
@@ -189,7 +191,7 @@ Start the development server:
 make api
 ```
 
-It listens on http://127.0.0.1:5000.
+It listens on http://127.0.0.1:5000. In the Docker image the API runs under Gunicorn instead of Flask's development server.
 
 | Method | Path | Description |
 |---|---|---|
@@ -214,6 +216,18 @@ Response:
 ```
 
 Send a JSON list of customers instead of one object to get a list of predictions. Missing fields, wrong types or an empty body return HTTP 400 with an `error` message.
+
+## Docker
+
+Build and run the API as a container:
+
+```bash
+make docker-build   # build the image churn-api
+make docker-run     # run it in the background on port 5000
+make docker-stop    # stop and remove the container
+```
+
+The image installs `requirements.txt`, copies `src/`, `models/`, and serves the API with Gunicorn. `.dockerignore` keeps the virtual environment, data and other local files out of the build.
 
 ## Project structure
 
@@ -249,8 +263,10 @@ Send a JSON list of customers instead of one object to get a list of predictions
 │   ├── test_config.py                               # Tests for the config loader
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
 │   └── test_train.py                                # Minimal tests for the training module
+├── .dockerignore                                    # Files kept out of Docker builds
 ├── .dvcignore                                       # Files DVC should ignore
 ├── .gitignore                                       # Files Git should not track
+├── Dockerfile                                       # API image (Gunicorn)
 ├── Makefile                                         # Short commands for every task (`make <target>`)
 ├── pytest.ini                                       # pytest settings
 ├── README.md                                        # This file
@@ -275,6 +291,9 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 | `make mlflow-ui` | Opens the MLflow web interface so you can browse and compare runs. |
 | `make dvc-push` | Uploads DVC-tracked files to the DagsHub remote. |
 | `make dvc-pull` | Downloads the DVC-tracked files that match the current .dvc files in Git. |
+| `make docker-build` | Builds a Docker image from the Dockerfile in this folder (the final "." is the build context) and names it churn-api with -t. |
+| `make docker-run` | Starts a container from the churn-api image. |
+| `make docker-stop` | Stops the churn-api container and then removes it, so the name is free for the next `make docker-run`. |
 | `make clean` | Deletes generated files so you can start again from a clean state. |
 
 ## References
@@ -293,5 +312,7 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [DagsHub storage](https://dagshub.com/docs/feature_guide/dagshub_storage/)
 - [Flask documentation](https://flask.palletsprojects.com/)
 - [Flasgger (Swagger UI for Flask)](https://github.com/flasgger/flasgger)
+- [Gunicorn](https://docs.gunicorn.org/en/stable/)
+- [Docker documentation](https://docs.docker.com/)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.

@@ -22,7 +22,7 @@ SHELL := /bin/bash
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull clean
+.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -148,6 +148,26 @@ dvc-push:
 # Downloads the DVC-tracked files that match the current .dvc files in Git.
 dvc-pull:
 	.venv/bin/dvc pull
+
+# make docker-build
+# Builds a Docker image from the Dockerfile in this folder (the final "."
+# is the build context) and names it churn-api with -t.
+docker-build:
+	docker build -t churn-api .
+
+# make docker-run
+# Starts a container from the churn-api image.
+#   -d               run in the background (detached)
+#   --name churn-api give the container a fixed name so docker-stop can find it
+#   -p 5000:5000     map port 5000 on your machine to port 5000 in the container
+docker-run:
+	docker run -d --name churn-api -p 5000:5000 churn-api
+
+# make docker-stop
+# Stops the churn-api container and then removes it, so the name is free
+# for the next `make docker-run`.
+docker-stop:
+	docker stop churn-api && docker rm churn-api
 
 # make clean
 # Deletes generated files so you can start again from a clean state:
