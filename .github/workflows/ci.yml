@@ -4,9 +4,11 @@
 # pull request to main, so broken code is caught before it is merged.
 # Results appear in the repository's Actions tab and next to each commit
 # and pull request (a green tick or a red cross).
-# Reference: https://docs.github.com/en/actions/using-workflows/workflowsyntax-for-github-actions
+# Reference: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+
 # The name shown in the Actions tab.
 name: CI — Tests
+
 # "on" lists the events that start the workflow:
 #   push to main          tests the code that has been merged
 #   pull request to main  tests the code that is PROPOSED for merging, so
@@ -16,6 +18,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
 # A workflow has one or more jobs. This one has a single job called "test".
 jobs:
   test:
@@ -23,6 +26,7 @@ jobs:
     # It is created when the job starts and destroyed when it ends, so
     # nothing carries over from one run to the next.
     runs-on: ubuntu-latest
+
     # Steps run in order. "uses:" runs a ready-made action published on
     # GitHub; "run:" runs shell commands on the runner.
     steps:
@@ -30,11 +34,13 @@ jobs:
       # no code to test.
       - name: Checkout code
         uses: actions/checkout@v6
+
       # Install Python 3.11, the same version as our Docker image.
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+
       # Install the project's packages (including pytest and DVC). The runner
       # is a throwaway machine used for this project only, so plain pip
       # without a virtual environment is fine here.
@@ -42,6 +48,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       # The API tests load models/model_v1.pkl and models/model_v2.pkl. Those
       # files are git-ignored and tracked with DVC, so they are not in the
       # checkout and must be downloaded from DagsHub.
@@ -61,6 +68,7 @@ jobs:
           dvc remote modify origin --local access_key_id "$DAGSHUB_TOKEN"
           dvc remote modify origin --local secret_access_key "$DAGSHUB_TOKEN"
           dvc pull models/model_v1.pkl.dvc models/model_v2.pkl.dvc
+
       # Run the test suite (settings from pytest.ini). If any test fails,
       # pytest exits with a non-zero code and the job is marked as failed.
       - name: Run tests

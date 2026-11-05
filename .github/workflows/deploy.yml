@@ -1,0 +1,117 @@
+# GitHub Actions workflow: Continuous Deployment (CD).
+# On every push to main it runs the tests again and, only if they pass,
+# builds the API image, pushes it to Google Artifact Registry and deploys
+# it to Google Cloud Run. Merging to main therefore releases the new code.
+# Reference: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+#
+# Repository secrets used (Settings > Secrets and variables > Actions):
+#   DAGSHUB_TOKEN   DagsHub token, used to pull the models with DVC
+#   GCP_SA_KEY      JSON key of the Google Cloud service account that is
+#                   allowed to push images and deploy to Cloud Run
+#   GCP_PROJECT_ID  your Google Cloud project ID
+
+# The name shown in the Actions tab.
+name: CD — Deploy to Cloud Run
+
+# Deploy only when code reaches main (a direct push or a merged pull
+# request). Pull requests are tested by ci.yml but never deployed.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # ---- Job 1: test (the gate) ----
+  # The same steps as the CI workflow, written in short form (steps without
+  # a name: are labelled by their command in the Actions tab).
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      # The tests need the DVC-tracked models; see ci.yml for how the
+      # DAGSHUB_TOKEN secret reaches the dvc commands through env:.
+      - name: Pull models with DVC
+        env:
+          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          dvc remote modify origin --local access_key_id "$DAGSHUB_TOKEN"
+          dvc remote modify origin --local secret_access_key "$DAGSHUB_TOKEN"
+          dvc pull models/model_v1.pkl.dvc models/model_v2.pkl.dvc
+      - run: pytest
+
+  # ---- Job 2: deploy ----
+  deploy:
+    # needs: test makes this job wait for the test job and run only if it
+    # succeeded. Without it, both jobs would start at the same time.
+    needs: test
+    runs-on: ubuntu-latest
+    # A safety guard: run only for the main branch (github.ref is the
+    # branch that triggered the run), even if the triggers are changed.
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # This job runs on its own fresh machine, so it needs DVC again. Only
+      # dvc and its S3 plug-in are installed; building the image does not
+      # need the other packages on the runner.
+      - name: Install DVC
+        run: pip install dvc dvc-s3
+
+      # The Dockerfile copies models/ into the image. Without this step the
+      # image would contain no models and the new Cloud Run revision would
+      # crash on start-up.
+      - name: Pull models with DVC
+        env:
+          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          dvc remote modify origin --local access_key_id "$DAGSHUB_TOKEN"
+          dvc remote modify origin --local secret_access_key "$DAGSHUB_TOKEN"
+          dvc pull models/model_v1.pkl.dvc models/model_v2.pkl.dvc
+
+      # Log in to Google Cloud as the service account whose JSON key is
+      # stored in the GCP_SA_KEY secret. Later gcloud and docker commands
+      # use these credentials.
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install the gcloud command-line tool on the runner.
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      # 1. Let Docker log in to Artifact Registry in region us-central1.
+      # 2. Build the image. Its name has the form
+      #    REGION-docker.pkg.dev/PROJECT/REPOSITORY/IMAGE:TAG
+      #    and the tag is ${{ github.sha }}, the full hash of the commit
+      #    being deployed. Each deployment can therefore be traced back to
+      #    the exact code that produced it (a "latest" tag could not).
+      # 3. Push the image to Artifact Registry.
+      - name: Build and push to Artifact Registry
+        run: |
+          gcloud auth configure-docker us-central1-docker.pkg.dev
+          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/churn-api/churn-api:${{ github.sha }} .
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/churn-api/churn-api:${{ github.sha }}
+
+      # Deploy the image just pushed. The options are the same as in
+      # `make deploy`: managed platform, region us-central1, container port
+      # 5000, and public access without login (--allow-unauthenticated).
+      # Cloud Run creates a new revision and moves traffic to it.
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy churn-api \
+            --image us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/churn-api/churn-api:${{ github.sha }} \
+            --platform managed \
+            --region us-central1 \
+            --port 5000 \
+            --allow-unauthenticated

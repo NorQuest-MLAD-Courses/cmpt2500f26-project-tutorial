@@ -22,7 +22,7 @@ SHELL := /bin/bash
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop compose-up compose-down compose-train compose-tune docker-tag docker-push clean
+.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop compose-up compose-down compose-train compose-tune docker-tag docker-push deploy clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -61,6 +61,11 @@ venv:
 #    .dvc/config.local, which is git-ignored, so it never ends up in Git. The
 #    non-secret remote settings live in .dvc/config, which is committed.
 # 3. Finally `dvc pull` downloads the DVC-tracked files.
+# 4. The gcloud block installs the Google Cloud command-line tool if it is
+#    not already on your PATH (`command -v gcloud` checks for it). It is
+#    needed for `make deploy`. After a fresh install you must restart the
+#    shell and then log in and choose your Google Cloud project, as the
+#    messages say.
 setup: venv
 	@if .venv/bin/dvc config remote.origin.endpointurl \
 			| grep -q "repo-buckets"; then \
@@ -86,6 +91,18 @@ setup: venv
 	fi
 	@echo "Pulling data from DVC remote ..."
 	.venv/bin/dvc pull
+	@echo ""
+	@echo "Installing Google Cloud CLI ..."
+	@if ! command -v gcloud &> /dev/null; then \
+		echo "gcloud not found — installing ..."; \
+		curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts; \
+		echo ""; \
+		echo "gcloud installed. Restart your shell (exec -l $$SHELL) then run:"; \
+		echo "  gcloud auth login"; \
+		echo "  gcloud config set project <YOUR_PROJECT_ID>"; \
+	else \
+		echo "gcloud already installed: $$(gcloud --version 2>&1 | head -1)"; \
+	fi
 	@echo ""
 	@echo "Setup complete. Run 'make test' to verify."
 
@@ -211,6 +228,24 @@ docker-tag:
 docker-push:
 	docker push $(DOCKER_USER)/churn-api:latest
 	docker push $(DOCKER_USER)/churn-mlflow:latest
+
+# make deploy DOCKER_USER=<your-docker-hub-username>
+# Deploys the API image from Docker Hub to Google Cloud Run.
+#   --image docker.io/...    Cloud Run needs the full registry address; a short
+#                            name such as user/churn-api is not enough, so we
+#                            add the docker.io/ prefix for Docker Hub
+#   --platform managed       fully managed Cloud Run (Google runs the servers)
+#   --region us-central1     the data centre region to deploy to
+#   --port 5000              the port the container listens on (Gunicorn)
+#   --allow-unauthenticated  anyone with the URL can call the API
+# The backslashes continue one long shell command over several lines.
+deploy:
+	gcloud run deploy churn-api \
+		--image docker.io/$(DOCKER_USER)/churn-api:latest \
+		--platform managed \
+		--region us-central1 \
+		--port 5000 \
+		--allow-unauthenticated
 
 # make clean
 # Deletes generated files so you can start again from a clean state:

@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, and a Docker Compose stack.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, and CI/CD with GitHub Actions.
 
 ## Contents
 
@@ -16,6 +16,8 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [REST API](#rest-api)
 - [Docker](#docker)
 - [Docker Compose](#docker-compose)
+- [Cloud deployment (Google Cloud Run)](#cloud-deployment-google-cloud-run)
+- [CI/CD (GitHub Actions)](#cicd-github-actions)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -27,6 +29,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - A [DagsHub](https://dagshub.com/) account and repository (DVC remote storage)
 - Docker with Docker Compose
 - A [Docker Hub](https://hub.docker.com/) account (to publish images)
+- A Google Cloud project with billing enabled and the `gcloud` CLI (see the course's GCP setup guide, `lab_5_gcp_setup_guide.md`)
 
 GitHub Codespaces provides Python, Git and Docker out of the box.
 
@@ -45,7 +48,7 @@ Then run the one-command setup:
 make setup
 ```
 
-This creates the virtual environment in `.venv/`, installs `requirements.txt`, asks once for your DagsHub token (stored only in the git-ignored `.dvc/config.local`), and runs `dvc pull` to download the data and the trained models.
+This creates the virtual environment in `.venv/`, installs `requirements.txt`, asks once for your DagsHub token (stored only in the git-ignored `.dvc/config.local`), and runs `dvc pull` to download the data and the trained models. It also installs the Google Cloud CLI if it is missing.
 
 To recreate only the virtual environment, run `make venv`.
 
@@ -272,12 +275,42 @@ DOCKER_USER=<your-dockerhub-username> make docker-push
 
 This publishes `churn-api` and `churn-mlflow` to your Docker Hub account.
 
+## Cloud deployment (Google Cloud Run)
+
+Deploy the image you published to Docker Hub:
+
+```bash
+make docker-build
+DOCKER_USER=<your-dockerhub-username> make docker-tag
+DOCKER_USER=<your-dockerhub-username> make docker-push
+DOCKER_USER=<your-dockerhub-username> make deploy
+```
+
+`make deploy` runs `gcloud run deploy` for the service `churn-api` in `us-central1`. It prints a public HTTPS URL; check it with `curl <url>/health`. Cloud Run scales to zero when idle. One-time Google Cloud setup is described in the course's GCP setup guide (`lab_5_gcp_setup_guide.md`).
+
+## CI/CD (GitHub Actions)
+
+| Workflow | Runs on | What it does |
+|---|---|---|
+| `.github/workflows/ci.yml` (CI — Tests) | push to `main`, pull_request to `main` | runs the tests |
+| `.github/workflows/deploy.yml` (CD — Deploy to Cloud Run) | push to `main` | runs the tests, then builds the image, pushes it to Artifact Registry and deploys to Cloud Run |
+
+Add these repository secrets under Settings, Secrets and variables, Actions:
+
+- `DAGSHUB_TOKEN`: your DagsHub token, used to `dvc pull` the trained models (they are not in Git)
+- `GCP_PROJECT_ID`: your Google Cloud project ID
+- `GCP_SA_KEY`: the JSON key of a Google Cloud service account allowed to push to Artifact Registry and deploy to Cloud Run
+
 ## Project structure
 
 ```
 .
 ├── .dvc/
 │   └── config                                       # DVC remote settings (committed; keys go in the git-ignored config.local)
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                                   # CI: run tests on every push and pull request
+│       └── deploy.yml                               # CD: test, build, push and deploy on push to main
 ├── config/
 │   └── default.yaml                                 # Central configuration
 ├── data/
@@ -345,6 +378,7 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 | `make compose-tune` | Runs the tuning script inside a one-off api container (removed afterwards by --rm), logging to the MLflow container. |
 | `make docker-tag` | (or. |
 | `make docker-push` | Uploads both tagged images to Docker Hub. |
+| `make deploy` | Deploys the API image from Docker Hub to Google Cloud Run. |
 | `make clean` | Deletes generated files so you can start again from a clean state. |
 
 ## References
@@ -366,5 +400,7 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [Gunicorn](https://docs.gunicorn.org/en/stable/)
 - [Docker documentation](https://docs.docker.com/)
 - [Docker Compose](https://docs.docker.com/compose/)
+- [Google Cloud Run](https://docs.cloud.google.com/run/docs)
+- [GitHub Actions](https://docs.github.com/en/actions)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.
