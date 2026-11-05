@@ -27,6 +27,9 @@ Output: for each customer, JSON with the predicted label ("Yes"/"No"), the
         A batch request gets a JSON array back. Invalid input gets a JSON
         error message with status 400.
 
+Every prediction request is logged to the terminal and to logs/api.log (or to the
+folder named by the LOG_DIR environment variable).
+
 How to run (from the project root):
 
     python src/app.py
@@ -40,10 +43,48 @@ then, in a second terminal, for example:
 """
 
 import os
+import logging
 import pickle
 import pandas as pd
 from flask import Flask, jsonify, request
 from flasgger import Swagger
+
+# ---- Logging configuration ----
+# Logging replaces print(). Each message gets a timestamp, a severity level
+# (INFO for normal events, WARNING for bad input, ERROR for failures) and the
+# logger's name, and can be sent to several places at once. This gives a
+# record of what the service did, which is what you read when something goes
+# wrong in production.
+#
+# Log files go in the folder named by the LOG_DIR environment variable, or
+# logs/ (relative to the folder the server is started from) if LOG_DIR is not
+# set. Making the folder configurable lets a container point it at a mounted
+# volume. makedirs(..., exist_ok=True) creates the folder if needed and does
+# nothing if it already exists.
+
+log_dir = os.environ.get("LOG_DIR", "logs")
+os.makedirs(log_dir, exist_ok=True)
+
+# basicConfig sets up the root logger once for the whole process:
+#   level=INFO   records INFO, WARNING, ERROR and CRITICAL; DEBUG is ignored.
+#   format       the layout of each line, for example
+#                "2025-01-01 12:00:00,123 - churn_api - INFO - Loaded ...".
+#   handlers     where each message goes. StreamHandler writes to the
+#                terminal (stderr); FileHandler appends to api.log in log_dir, so
+#                the messages are kept after the terminal is closed.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(os.path.join(log_dir, "api.log")),
+    ],
+)
+
+# A named logger for this service. Its name appears in every line, which
+# tells our messages apart from those of Flask or other libraries.
+logger = logging.getLogger("churn_api")
+
 
 # Create the Flask application object. `__name__` tells Flask which module
 # the app lives in, so it can locate resources relative to this file. Every
@@ -77,7 +118,9 @@ MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
 model_v1 = load_model(os.path.join(MODEL_DIR, "model_v1.pkl"))
 model_v2 = load_model(os.path.join(MODEL_DIR, "model_v2.pkl"))
 
-print(f"Loaded model_v1 and model_v2 from {MODEL_DIR}")
+# Logger calls take a format string and its arguments separately; the
+# string is only built if the message is actually recorded.
+logger.info("Loaded model_v1 and model_v2 from %s", MODEL_DIR)
 
 
 # ---- Feature definitions ----
@@ -158,6 +201,9 @@ def run_prediction(model, model_label, json_data):
     for record in records:
         error, status = validate_input(record)
         if error:
+            # Bad input is the client's problem, not a server failure, so it
+            # is logged as a WARNING.
+            logger.warning("Validation failed for %s: %s", model_label, error)
             return jsonify({"error": error}), status
 
     # Build one DataFrame row per record, keep only the model's columns in
@@ -171,6 +217,9 @@ def run_prediction(model, model_label, json_data):
         # proba[i] is [P(class 0 = "No"), P(class 1 = "Yes")] for record i.
         proba = model.predict_proba(input_df)
     except Exception as e:
+        # A failure after validation points to a problem on our side, so it
+        # is logged as an ERROR.
+        logger.error("Prediction failed for %s: %s", model_label, str(e))
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
 
     # Build one result per record. yhat[i] is the predicted class (0 or 1);
@@ -184,6 +233,12 @@ def run_prediction(model, model_label, json_data):
             "probability": float(proba[i][yhat[i]]),
             "model_version": model_label,
         })
+
+    # Record each successful request: which model, how many records and the
+    # predicted labels. Customer details are not logged.
+    logger.info("Prediction successful: %s, %d record(s), result=%s",
+                model_label, len(records),
+                [r["prediction"] for r in results])
 
     # A batch request gets a list back; a single record gets a single object.
     return jsonify(results if is_batch else results[0])
@@ -364,6 +419,7 @@ def predict_v1():
     json_data = request.get_json(silent=True)
     if not json_data:
         # 400 Bad Request: the problem is in what the client sent.
+        logger.warning("v1/predict called with no input data")
         return jsonify({"error": "No input data provided"}), 400
     return run_prediction(model_v1, "v1", json_data)
 
@@ -469,6 +525,7 @@ def predict_v2():
     """
     json_data = request.get_json(silent=True)
     if not json_data:
+        logger.warning("v2/predict called with no input data")
         return jsonify({"error": "No input data provided"}), 400
     return run_prediction(model_v2, "v2", json_data)
 
@@ -476,6 +533,7 @@ def predict_v2():
 # This block runs only when the file is executed directly
 # (`python src/app.py`), not when it is imported, for example by the tests.
 if __name__ == "__main__":
+    logger.info("Starting prediction API service (development mode)")
     # Read the port from the PORT environment variable so it can be changed
     # without editing code (useful if 5000 is already in use); default 5000.
     port = int(os.environ.get("PORT", 5000))

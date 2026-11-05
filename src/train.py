@@ -16,6 +16,7 @@ How to run (from the project root, after make preprocess):
     python src/train.py --config config/experiment.yaml
     python src/train.py --test-size 0.2 --random-state 42 --model-out models/m2.pkl
     python src/train.py --experiment-name feature-test
+    make compose-train      (inside Docker Compose, logs to the MLflow server)
 
 Settings come from config/default.yaml (or the file given with --config):
 paths, the numeric feature list, the train/test split, the model
@@ -25,11 +26,13 @@ Command-line flags override single values for one run.
 Input:  the processed CSV (paths.processed_data, or --data)
 Output: the whole pickled Pipeline (paths.model, or --model-out),
         an MLflow run (parameters, metrics and the logged model) in the
-        tracking store (sqlite:///mlflow.db by default),
+        tracking store (the MLFLOW_TRACKING_URI environment variable if set,
+        otherwise sqlite:///mlflow.db from the config),
         plus test accuracy, F1 and a classification report, printed
 """
 
 import argparse
+import os
 import pickle
 import pandas as pd
 import mlflow
@@ -132,12 +135,18 @@ def main():
     experiment_name = args.experiment_name or cfg["mlflow"]["experiment_name"]
 
     # --- MLflow setup ---
-    # The tracking URI says where MLflow stores run data. sqlite:///mlflow.db
-    # is a local database file in the project root; model files go under
-    # mlruns/. set_experiment() selects the experiment (a named group of
-    # runs) and creates it if it does not exist yet. Both calls must come
-    # before start_run(), or the run would go to the default location.
-    mlflow.set_tracking_uri(cfg["mlflow"]["tracking_uri"])
+    # The tracking URI says where MLflow stores run data.
+    # os.environ.get("MLFLOW_TRACKING_URI", default) reads that environment
+    # variable if it is set and otherwise returns the config value. Run
+    # locally with nothing set, runs go to the config's sqlite:///mlflow.db
+    # (a database file in the project root; model files go under mlruns/).
+    # Inside Docker Compose the variable is set to http://mlflow:5001, so the
+    # same code logs to the MLflow server container instead. You can also set
+    # it for one command: MLFLOW_TRACKING_URI=http://localhost:5001 make train
+    # set_experiment() selects the experiment (a named group of runs) and
+    # creates it if it does not exist yet. Both calls must come before
+    # start_run(), or the run would go to the default location.
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", cfg["mlflow"]["tracking_uri"]))
     mlflow.set_experiment(experiment_name)
 
     # Load processed data

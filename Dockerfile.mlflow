@@ -1,0 +1,51 @@
+# Dockerfile.mlflow builds the image for the MLflow tracking server.
+# The server has different needs from the API: it does not need pandas,
+# scikit-learn or Flask, only the mlflow package, so it gets its own small
+# Dockerfile. docker-compose.yml builds it for the mlflow service.
+
+# Same minimal Python 3.11 base image as the API.
+FROM python:3.11-slim
+
+# Install MLflow only. --no-cache-dir keeps pip's download cache out of the
+# image.
+RUN pip install --no-cache-dir mlflow
+
+# The tracking database and model artifacts live here. docker-compose.yml
+# mounts a named volume at /mlflow so they survive container restarts.
+WORKDIR /mlflow
+
+# The server listens on port 5001 (the API already uses 5000).
+EXPOSE 5001
+
+# Start the tracking server. The options:
+#   --host 0.0.0.0     accept connections from other containers and from the
+#                      host machine, not only from inside this container
+#   --port 5001        the port to listen on
+#   --backend-store-uri sqlite:///mlflow.db
+#                      where runs, parameters and metrics are stored. With
+#                      three slashes the path is RELATIVE to the working
+#                      directory, so the database is /mlflow/mlflow.db (inside
+#                      the volume). An absolute path needs four slashes,
+#                      for example sqlite:////mlflow/mlflow.db.
+#   --artifacts-destination ./mlartifacts
+#                      where the server stores uploaded artifacts such as
+#                      model files: /mlflow/mlartifacts, also in the volume.
+#                      Training scripts upload artifacts to the server over
+#                      HTTP, so they never need access to this disk.
+#   --allowed-hosts    since version 3.5, MLflow rejects requests whose Host
+#                      header is not on an allowed list (this protects against
+#                      an attack called DNS rebinding). The API container
+#                      calls the server as mlflow:5001, so we must allow
+#                      "mlflow:*". Setting this option REPLACES MLflow's
+#                      default list, so we repeat the defaults too: localhost,
+#                      127.0.0.1 and the private network ranges 10.*, 172.*
+#                      and 192.168.*, which keep the web UI working in your
+#                      browser. Without it, those requests get 403 Forbidden.
+# Docker's exec form (a JSON list) runs mlflow directly, without a shell.
+# The backslashes continue the single CMD instruction over several lines.
+CMD ["mlflow", "server", \
+     "--host", "0.0.0.0", \
+     "--port", "5001", \
+     "--backend-store-uri", "sqlite:///mlflow.db", \
+     "--artifacts-destination", "./mlartifacts", \
+     "--allowed-hosts", "localhost:*,127.0.0.1:*,10.*,172.*,192.168.*,mlflow:*"]

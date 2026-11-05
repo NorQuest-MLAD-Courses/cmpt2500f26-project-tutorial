@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, and Docker images.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, and a Docker Compose stack.
 
 ## Contents
 
@@ -15,6 +15,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [Data versioning (DVC)](#data-versioning-dvc)
 - [REST API](#rest-api)
 - [Docker](#docker)
+- [Docker Compose](#docker-compose)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -24,7 +25,8 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - Python 3.11 or newer
 - Git
 - A [DagsHub](https://dagshub.com/) account and repository (DVC remote storage)
-- Docker
+- Docker with Docker Compose
+- A [Docker Hub](https://hub.docker.com/) account (to publish images)
 
 GitHub Codespaces provides Python, Git and Docker out of the box.
 
@@ -172,6 +174,8 @@ make mlflow-ui
 and open http://127.0.0.1:5000 (in Codespaces, use the forwarded port 5000 in the Ports tab).
 The API also uses port 5000, so stop one before starting the other.
 
+Inside the Docker Compose stack, training logs to the MLflow server container instead (see [Docker Compose](#docker-compose)).
+
 ## Data versioning (DVC)
 
 Large files are versioned with [DVC](https://doc.dvc.org/) and stored on DagsHub; Git only keeps the small `.dvc` pointer files. Tracked with DVC: `data/raw/`, `data/processed/`, `models/model_v1.pkl` and `models/model_v2.pkl`.
@@ -217,6 +221,8 @@ Response:
 
 Send a JSON list of customers instead of one object to get a list of predictions. Missing fields, wrong types or an empty body return HTTP 400 with an `error` message.
 
+The API logs to the console and to `logs/api.log` (the folder is set by `LOG_DIR`).
+
 ## Docker
 
 Build and run the API as a container:
@@ -227,7 +233,44 @@ make docker-run     # run it in the background on port 5000
 make docker-stop    # stop and remove the container
 ```
 
-The image installs `requirements.txt`, copies `src/`, `models/`, and serves the API with Gunicorn. `.dockerignore` keeps the virtual environment, data and other local files out of the build.
+The image installs `requirements.txt`, copies `src/`, `models/` and `config/`, and serves the API with Gunicorn. `.dockerignore` keeps the virtual environment, data and other local files out of the build.
+
+## Docker Compose
+
+Start the whole stack:
+
+```bash
+make compose-up     # build and start all services
+make compose-down   # stop and remove the containers
+```
+
+| Service | URL | Purpose |
+|---|---|---|
+| `api` | http://localhost:5000 | Prediction API |
+| `mlflow` | http://localhost:5001 | MLflow tracking server and UI |
+
+In Codespaces, open each port from the Ports tab.
+
+Train or tune inside the stack. The scripts then log to the MLflow server at `http://mlflow:5001`:
+
+```bash
+make compose-train
+make compose-tune
+```
+
+The MLflow server keeps its database and model files in the named volume `mlflow-data`, separate from your local `mlflow.db`. To send a local run to the server, set `MLFLOW_TRACKING_URI=http://localhost:5001` for that command.
+
+### Publishing images
+
+```bash
+docker login
+make docker-build
+make compose-up
+DOCKER_USER=<your-dockerhub-username> make docker-tag
+DOCKER_USER=<your-dockerhub-username> make docker-push
+```
+
+This publishes `churn-api` and `churn-mlflow` to your Docker Hub account.
 
 ## Project structure
 
@@ -266,7 +309,9 @@ The image installs `requirements.txt`, copies `src/`, `models/`, and serves the 
 ├── .dockerignore                                    # Files kept out of Docker builds
 ├── .dvcignore                                       # Files DVC should ignore
 ├── .gitignore                                       # Files Git should not track
+├── docker-compose.yml                               # Multi-container stack
 ├── Dockerfile                                       # API image (Gunicorn)
+├── Dockerfile.mlflow                                # MLflow tracking server image
 ├── Makefile                                         # Short commands for every task (`make <target>`)
 ├── pytest.ini                                       # pytest settings
 ├── README.md                                        # This file
@@ -294,6 +339,12 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 | `make docker-build` | Builds a Docker image from the Dockerfile in this folder (the final "." is the build context) and names it churn-api with -t. |
 | `make docker-run` | Starts a container from the churn-api image. |
 | `make docker-stop` | Stops the churn-api container and then removes it, so the name is free for the next `make docker-run`. |
+| `make compose-up` | Starts every service in docker-compose.yml. |
+| `make compose-down` | Stops and removes the Compose containers and network. |
+| `make compose-train` | Runs the training script inside a one-off container built from the api service, so it talks to the MLflow container over the Compose network. |
+| `make compose-tune` | Runs the tuning script inside a one-off api container (removed afterwards by --rm), logging to the MLflow container. |
+| `make docker-tag` | (or. |
+| `make docker-push` | Uploads both tagged images to Docker Hub. |
 | `make clean` | Deletes generated files so you can start again from a clean state. |
 
 ## References
@@ -314,5 +365,6 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [Flasgger (Swagger UI for Flask)](https://github.com/flasgger/flasgger)
 - [Gunicorn](https://docs.gunicorn.org/en/stable/)
 - [Docker documentation](https://docs.docker.com/)
+- [Docker Compose](https://docs.docker.com/compose/)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.

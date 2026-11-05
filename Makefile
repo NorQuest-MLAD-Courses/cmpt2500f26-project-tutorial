@@ -22,7 +22,7 @@ SHELL := /bin/bash
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop clean
+.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop compose-up compose-down compose-train compose-tune docker-tag docker-push clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -169,11 +169,55 @@ docker-run:
 docker-stop:
 	docker stop churn-api && docker rm churn-api
 
+# make compose-up
+# Starts every service in docker-compose.yml. --build rebuilds the images
+# first if their files changed; -d runs the stack in the background.
+compose-up:
+	docker compose up --build -d
+
+# make compose-down
+# Stops and removes the Compose containers and network. Named volumes
+# (such as the MLflow data) are kept.
+compose-down:
+	docker compose down
+
+# make compose-train
+# Runs the training script inside a one-off container built from the api
+# service, so it talks to the MLflow container over the Compose network.
+# --rm deletes that one-off container when the script finishes.
+compose-train:
+	docker compose run --rm api python src/train.py
+
+# make compose-tune
+# Runs the tuning script inside a one-off api container (removed afterwards
+# by --rm), logging to the MLflow container.
+compose-tune:
+	docker compose run --rm api python src/tune.py
+
+# make docker-tag DOCKER_USER=<your-docker-hub-username>
+# (or: DOCKER_USER=<your-username> make docker-tag)
+# Gives the local images a second name in the form <user>/<image>:latest,
+# which is the name Docker Hub expects. $(DOCKER_USER) is a Make variable
+# that you set on the command line or in the environment.
+# `$(shell docker compose images mlflow -q)` runs a command when Make expands
+# the recipe and inserts its output: the ID of the image Compose built for
+# the mlflow service (run `make compose-up` first so that image exists).
+docker-tag:
+	docker tag churn-api $(DOCKER_USER)/churn-api:latest
+	docker tag $(shell docker compose images mlflow -q) $(DOCKER_USER)/churn-mlflow:latest
+
+# make docker-push DOCKER_USER=<your-docker-hub-username>
+# Uploads both tagged images to Docker Hub. Run `docker login` once first.
+docker-push:
+	docker push $(DOCKER_USER)/churn-api:latest
+	docker push $(DOCKER_USER)/churn-mlflow:latest
+
 # make clean
 # Deletes generated files so you can start again from a clean state:
 #   .venv              the virtual environment (recreate it with `make venv`)
 #   models/*.pkl       saved models (recreate them with `make train`)
 #   data/processed/*.csv  processed data (recreate it with `make preprocess`)
 #   mlflow.db mlruns/  the local MLflow tracking database and artifact folder
+#   logs/              API log files
 clean:
-	rm -rf .venv models/*.pkl data/processed/*.csv mlflow.db mlruns/
+	rm -rf .venv models/*.pkl data/processed/*.csv mlflow.db mlruns/ logs/

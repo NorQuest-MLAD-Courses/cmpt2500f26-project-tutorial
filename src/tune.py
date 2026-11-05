@@ -18,6 +18,7 @@ How to run (from the project root; takes a few minutes):
     make tune
     python src/tune.py
     python src/tune.py --experiment-name tuning-wider-grid
+    make compose-tune      (inside Docker Compose, logs to the MLflow server)
 
 Input:  the raw CSV (paths.raw_data in config/default.yaml), cleaned with
         load_and_clean() from preprocess.py
@@ -26,6 +27,7 @@ Output: models/model_v1.pkl (best F1) and models/model_v2.pkl (second best),
 """
 
 import argparse
+import os
 import pickle
 # product() yields every combination of several lists, which turns a grid of
 # hyperparameter values into the list of candidates to try.
@@ -150,9 +152,12 @@ def main():
     args = parse_args()
     cfg = load_config(args.config)
 
-    # Same tracking store as train.py; set_experiment() creates the
-    # experiment on first use. Both calls must come before start_run().
-    mlflow.set_tracking_uri(cfg["mlflow"]["tracking_uri"])
+    # Same tracking store as train.py: the MLFLOW_TRACKING_URI environment
+    # variable if it is set (inside Docker Compose it points to the MLflow
+    # server container), otherwise the config value (the local mlflow.db).
+    # set_experiment() creates the experiment on first use. Both calls must
+    # come before start_run().
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", cfg["mlflow"]["tracking_uri"]))
     mlflow.set_experiment(args.experiment_name)
 
     # Load raw data and apply cleaning only (no encoding).

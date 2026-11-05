@@ -33,6 +33,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # models/model_v2.pkl must exist before you build) into /app.
 COPY src/ src/
 COPY models/ models/
+# Training scripts run inside this image with `make compose-train` and read
+# config/default.yaml, so the config folder is copied in too.
+COPY config/ config/
 
 # ---- Expose the API port ----
 # Documents that the container listens on port 5000. It does not publish

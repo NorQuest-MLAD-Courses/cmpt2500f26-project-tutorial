@@ -44,3 +44,7 @@ mlruns/
 .dvc/cache/
 .dvc/tmp/
 .dvc/config.local
+
+# ---- Logs ----
+# Log files written by the API at run time.
+logs/

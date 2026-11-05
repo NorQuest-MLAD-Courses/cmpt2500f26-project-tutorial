@@ -1,0 +1,87 @@
+# docker-compose.yml describes several containers ("services") that run
+# together, how they are built, which ports they publish, what storage they
+# use and how they find each other. One command starts them all:
+#   make compose-up    (docker compose up --build -d)
+#   make compose-down  (docker compose down)
+# Reference: https://docs.docker.com/reference/compose-file/
+
+# Each entry under services: becomes one container.
+services:
+  # ---- api: the Flask prediction API (built from Dockerfile) ----
+  api:
+    # Build the image from the Dockerfile in this folder. context: . is the
+    # build context (the folder sent to Docker, filtered by .dockerignore).
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # "HOST:CONTAINER": port 5000 on your machine forwards to port 5000 inside
+    # the container, where Gunicorn listens. Quote port pairs: YAML can
+    # misread an unquoted value such as 22:22 as a number.
+    ports:
+      - "5000:5000"
+    # Bind mounts ("host path:container path") make a folder on your machine
+    # appear inside the container. Changes on either side are visible on both.
+    volumes:
+      # The API reads models from disk, so you can retrain and update them on the
+      # host without rebuilding the image.
+      - ./models:/app/models
+      # Training runs inside this container need the dataset. Mounting it at run
+      # time keeps the data out of the image.
+      - ./data:/app/data
+      # The API writes its log files to /app/logs; this mount keeps them in the
+      # project's logs/ folder after the container stops.
+      - ./logs:/app/logs
+    # Environment variables set inside the container.
+    environment:
+      # train.py and tune.py read MLFLOW_TRACKING_URI and, when it is set, log to
+      # the MLflow container instead of the local sqlite:///mlflow.db file.
+      # "mlflow" is the service name below; Docker's internal DNS resolves it.
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+      # The folder where app.py writes its log files (the mounted logs/ folder).
+      - LOG_DIR=/app/logs
+    # Start the mlflow container before this one. depends_on controls START
+    # ORDER only; it does not wait until MLflow is ready to answer requests.
+    depends_on:
+      - mlflow
+    # Join the shared network so this container can reach the others by name.
+    networks:
+      - ml-network
+    # Restart the container if it crashes, unless you stopped it yourself.
+    restart: unless-stopped
+
+  # ---- mlflow: the MLflow tracking server (built from Dockerfile.mlflow) ----
+  # Open the MLflow UI at http://localhost:5001.
+  mlflow:
+    # Same build context, but a different Dockerfile.
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    # Publish the tracking server and its web UI on port 5001.
+    ports:
+      - "5001:5001"
+    # A NAMED volume (declared under volumes: at the bottom), not a bind mount.
+    # Docker creates and manages this storage itself. It holds the tracking
+    # database and artifacts in /mlflow and survives when the container is
+    # removed and recreated. It is separate from the mlflow.db file in your
+    # project folder, which `make train` uses outside Docker.
+    volumes:
+      - mlflow-data:/mlflow
+    # Same network as the other services.
+    networks:
+      - ml-network
+    # Restart automatically after a crash.
+    restart: unless-stopped
+
+# Named volumes used by the services above. Docker stores them outside the
+# project folder; `docker compose down` keeps them, while
+# `docker compose down -v` deletes them (and the data inside).
+volumes:
+  # MLflow's tracking database and artifacts.
+  mlflow-data:
+
+# A private network shared by all services. On it, each container can reach
+# the others by service name (for example http://mlflow:5001).
+networks:
+  ml-network:
+    # bridge is Docker's standard network type for containers on one machine.
+    driver: bridge

@@ -15,8 +15,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Data (not needed by the API)
-# The API only needs the trained models, not the training data.
+# Data (mounted as volume, not baked into image)
+# docker-compose.yml bind-mounts ./data into the api container when it is
+# needed, so the data is never copied into the image.
 data/
 
 # Experiment tracking
@@ -45,12 +46,17 @@ Dockerfile.mlflow
 docker-compose.yml
 .dockerignore
 
-# Tests and config not needed at runtime
-# Tests and their settings, and the YAML config, are not used by the API at
-# run time. Run the tests on your machine with `make test`.
+# Tests not needed at runtime
+# Tests and their settings are not used by the API at run time. Run the
+# tests on your machine with `make test`.
+# config/ is NOT excluded: training scripts that run inside the api
+# container read config/default.yaml, so the Dockerfile copies it in.
 tests/
-config/
 pytest.ini
+
+# Logs
+# Log files are written at run time to a mounted folder, not shipped in the image.
+logs/
 
 # Documentation
 # README and other Markdown documentation.
