@@ -86,6 +86,8 @@ services:
       # Mount our scrape configuration at the path where Prometheus looks for it.
       # After editing it, restart the container to load the change.
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      # Mount the alert rule files; prometheus.yml loads them via rule_files.
+      - ./monitoring/rules:/etc/prometheus/rules
     # Start the API first, since it is the main target Prometheus scrapes.
     depends_on:
       - api

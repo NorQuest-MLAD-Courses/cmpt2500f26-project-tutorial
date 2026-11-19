@@ -1,0 +1,84 @@
+# Prometheus alert rules. prometheus.yml loads this file through
+# rule_files, and Prometheus evaluates every rule at each
+# evaluation_interval (15s).
+# Each rule has:
+#   alert        the alert's name
+#   expr         a PromQL expression; the alert condition is true whenever
+#                the expression returns a result
+#   for          how long the condition must stay true before the alert
+#                fires. Until then it is "pending". This avoids alerts for
+#                short spikes.
+#   labels       extra labels attached to the alert, for example a severity
+#                that a notification system could use to route it
+#   annotations  human-readable text. {{ $value }} is the value of expr and
+#                {{ $labels.<name> }} a label of the series that fired.
+# Alerts appear at http://localhost:9090/alerts as inactive, pending or
+# firing. (No notification service is configured, so nobody is emailed.)
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+# Check this file with: promtool check rules monitoring/rules/ml_alerts.yml
+
+# Rules are organised in named groups; the rules in a group are evaluated together.
+groups:
+  - name: ml_application_alerts
+    # The list of rules in this group.
+    rules:
+      # Alert: prediction error rate exceeds 10%
+      - alert: HighPredictionErrorRate
+        # rate(counter[5m]) is the per-second increase of a counter, averaged over
+        # the last 5 minutes. Divide the rate of failed requests (status "error"
+        # or "validation_error"; =~ is a regular-expression match) by the rate of
+        # all requests: the result is the fraction that failed. Fire above 0.1.
+        # The ">" after "expr:" starts a YAML folded block: the indented lines
+        # below are joined into one line.
+        expr: >
+          sum(rate(prediction_requests_total{status=~"error|validation_error"}[5m]))
+          /
+          sum(rate(prediction_requests_total[5m]))
+          > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High prediction error rate (> 10%)"
+          description: "Prediction API error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # Alert: 95th percentile response time exceeds 1 second
+      - alert: SlowPredictionResponse
+        # histogram_quantile(0.95, ...) estimates the 95th percentile of request
+        # duration from the histogram buckets (_bucket series). "by (le,
+        # model_version)" keeps the bucket boundary label le, which the function
+        # needs, and gives one result per model version.
+        expr: >
+          histogram_quantile(0.95,
+            sum(rate(prediction_duration_seconds_bucket[5m])) by (le, model_version)
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow prediction response time"
+          description: "95th percentile response time for model {{ $labels.model_version }} is {{ $value }}s."
+
+      # Alert: API is down (no successful scrapes)
+      - alert: APIDown
+        # Prometheus sets up{job="..."} to 1 after a successful scrape and 0 after
+        # a failed one, so this is true while the API cannot be scraped.
+        expr: up{job="churn-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Churn API is down"
+          description: "Prometheus has not been able to scrape the API for over 1 minute."
+
+      # Alert: high memory usage during training
+      - alert: HighTrainingMemory
+        # Convert bytes to GB (divide by 1024 three times) and fire above 1.5 GB.
+        # This metric exists only while a tuning run is being scraped.
+        expr: training_memory_usage_bytes / 1024 / 1024 / 1024 > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage during training"
+          description: "Training process is using {{ $value | humanize }}GB of memory."

@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, Prometheus metrics, and Grafana dashboards.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, Prometheus metrics, Grafana dashboards, and alert rules.
 
 ## Contents
 
@@ -328,6 +328,17 @@ Grafana (http://localhost:3000, login admin / admin) is provisioned automaticall
 - API Performance: Request Rate (requests/sec), Response Latency (p50 / p95 / p99), Error Rate (4xx + 5xx / total), Prediction Requests by Model Version, Prediction Latency by Model Version
 - Training Monitoring: Training vs Validation Accuracy, Training vs Validation F1, CPU Usage During Training, Memory Usage During Training, Top Feature Importances, Training Epochs Completed
 
+### Alerts
+
+Alert rules in `monitoring/rules/ml_alerts.yml` (see http://localhost:9090/alerts):
+
+| Alert | Fires when |
+|---|---|
+| `HighPredictionErrorRate` | High prediction error rate (> 10%) (for 2m) |
+| `SlowPredictionResponse` | Slow prediction response time (for 5m) |
+| `APIDown` | Churn API is down (for 1m) |
+| `HighTrainingMemory` | High memory usage during training (for 5m) |
+
 ## Project structure
 
 ```
@@ -359,6 +370,8 @@ Grafana (http://localhost:3000, login admin / admin) is provisioned automaticall
 │   │       │   └── dashboards.yml                   # Grafana dashboard provider
 │   │       └── datasources/
 │   │           └── prometheus.yml                   # Grafana data source
+│   ├── rules/
+│   │   └── ml_alerts.yml                            # Prometheus alert rules
 │   └── prometheus.yml                               # Prometheus scrape configuration
 ├── notebooks/
 │   └── proof_of_concept.ipynb                       # Original proof-of-concept notebook

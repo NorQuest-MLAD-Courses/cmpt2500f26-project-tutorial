@@ -14,6 +14,12 @@ global:
   # How often to evaluate rules (such as alert rules).
   evaluation_interval: 15s
 
+# Files with alert rules. The glob loads every .yml file in the rules
+# folder, which docker-compose.yml mounts from monitoring/rules/.
+# Firing alerts are listed at http://localhost:9090/alerts.
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
 # One entry per job. A job is a group of targets that expose the same kind
 # of metrics; Prometheus adds a job="..." label to every series it scrapes.
 scrape_configs:
