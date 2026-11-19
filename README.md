@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, and CI/CD with GitHub Actions.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, and Prometheus metrics.
 
 ## Contents
 
@@ -18,6 +18,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [Docker Compose](#docker-compose)
 - [Cloud deployment (Google Cloud Run)](#cloud-deployment-google-cloud-run)
 - [CI/CD (GitHub Actions)](#cicd-github-actions)
+- [Monitoring](#monitoring)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -152,9 +153,9 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 22 tests with pytest (configured in `pytest.ini`):
+Runs 24 tests with pytest (configured in `pytest.ini`):
 
-- `tests/test_api.py`: 9 tests. Automated tests for the Flask API endpoints.
+- `tests/test_api.py`: 11 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 5 tests. Tests for the training module.
@@ -207,6 +208,7 @@ It listens on http://127.0.0.1:5000. In the Docker image the API runs under Guni
 | GET | `/info` | API Information |
 | POST | `/v1/predict` | Predict churn using model v1 |
 | POST | `/v2/predict` | Predict churn using model v2 |
+| GET | `/metrics` | Expose Prometheus metrics |
 | GET | `/apidocs/` | Interactive Swagger UI (generated from the route docstrings) |
 
 Example request:
@@ -252,6 +254,7 @@ make compose-down   # stop and remove the containers
 |---|---|---|
 | `api` | http://localhost:5000 | Prediction API |
 | `mlflow` | http://localhost:5001 | MLflow tracking server and UI |
+| `prometheus` | http://localhost:9090 | Metrics collection and alerting (`prom/prometheus:v3.13.4`) |
 
 In Codespaces, open each port from the Ports tab.
 
@@ -302,6 +305,16 @@ Add these repository secrets under Settings, Secrets and variables, Actions:
 - `GCP_PROJECT_ID`: your Google Cloud project ID
 - `GCP_SA_KEY`: the JSON key of a Google Cloud service account allowed to push to Artifact Registry and deploy to Cloud Run
 
+## Monitoring
+
+### Prometheus
+
+Prometheus (http://localhost:9090) scrapes these targets (Status, Targets shows their state):
+
+- `churn-api` at `api:5000`: API metrics: request counts and latency per route, plus `prediction_requests_total`, `prediction_duration_seconds` and `active_models_loaded`
+
+The API exposes its metrics at `/metrics`.
+
 ## Project structure
 
 ```
@@ -323,6 +336,8 @@ Add these repository secrets under Settings, Secrets and variables, Actions:
 ├── models/                                          # trained models (`*.pkl` are git-ignored)
 │   ├── model_v1.pkl.dvc                             # DVC pointer for the best tuned model
 │   └── model_v2.pkl.dvc                             # DVC pointer for the second-best tuned model
+├── monitoring/
+│   └── prometheus.yml                               # Prometheus scrape configuration
 ├── notebooks/
 │   └── proof_of_concept.ipynb                       # Original proof-of-concept notebook
 ├── src/
@@ -404,5 +419,7 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [Docker Compose](https://docs.docker.com/compose/)
 - [Google Cloud Run](https://docs.cloud.google.com/run/docs)
 - [GitHub Actions](https://docs.github.com/en/actions)
+- [Prometheus documentation](https://prometheus.io/docs/)
+- [prometheus_flask_exporter](https://github.com/rycus86/prometheus_flask_exporter)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.

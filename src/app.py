@@ -13,6 +13,7 @@ Endpoints:
     POST /v2/predict  ->  churn prediction(s) from model v2
     GET  /info        ->  description of the API and its input format
     GET  /apidocs/    ->  interactive Swagger documentation (from Flasgger)
+    GET  /metrics     ->  Prometheus metrics, in Prometheus text format
 
 When the module is loaded it reads two trained pipelines,
 models/model_v1.pkl and models/model_v2.pkl, from disk. Both are complete
@@ -28,7 +29,8 @@ Output: for each customer, JSON with the predicted label ("Yes"/"No"), the
         error message with status 400.
 
 Every prediction request is logged to the terminal and to logs/api.log (or to the
-folder named by the LOG_DIR environment variable).
+folder named by the LOG_DIR environment variable), and counted in the
+Prometheus metrics served at /metrics.
 
 How to run (from the project root):
 
@@ -43,11 +45,15 @@ then, in a second terminal, for example:
 """
 
 import os
+import time
 import logging
 import pickle
 import pandas as pd
 from flask import Flask, jsonify, request
 from flasgger import Swagger
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Histogram, Gauge
 
 # ---- Logging configuration ----
 # Logging replaces print(). Each message gets a timestamp, a severity level
@@ -98,6 +104,62 @@ app = Flask(__name__)
 # specification is served as JSON at /apispec_1.json.
 swagger = Swagger(app)
 
+# ---- Prometheus metrics ----
+# Prometheus is a time-series database that collects operational numbers
+# (request counts, latencies, ...). It *pulls* them: every few seconds it
+# sends a GET request to this app's /metrics endpoint (defined below) and
+# stores the values it reads, with a timestamp. The app only has to keep its
+# metrics up to date and expose them; it does not send anything itself.
+
+# Auto-instrument all routes (request count, latency histograms)
+# PrometheusMetrics wraps every Flask route and records generic HTTP metrics
+# (flask_http_request_total, flask_http_request_duration_seconds, ...) for
+# each endpoint, method and status code, without any code in the routes.
+# path=None stops it from registering its own /metrics endpoint; we define
+# that endpoint ourselves below because the automatic one can fail silently
+# under Flask's debug reloader.
+metrics = PrometheusMetrics(app, path=None)
+
+# Custom application-level metrics
+# These record things the generic HTTP metrics cannot know about, such as
+# which model served a prediction. Each metric has a name (what you type in
+# a Prometheus query), a help text and, optionally, *label* names. A label
+# splits one metric into several time series, one per combination of label
+# values, for example model_version="v1" and status="success".
+#
+# Metric objects are created once, at module level. Creating the same metric
+# name twice in one process raises an error.
+#
+# Counter: a number that only goes up (here: number of prediction requests).
+# Rates such as "requests per second" are computed from it in a query with
+# rate(). Labels: which model, and whether the request succeeded, failed
+# validation, or failed during prediction.
+PREDICTION_REQUESTS = Counter(
+    "prediction_requests_total",
+    "Total prediction requests by model version and outcome",
+    ["model_version", "status"],
+)
+
+# Histogram: records how long each prediction took by counting observations
+# into buckets. Each bucket value is an upper bound in seconds, so the 0.05
+# bucket counts requests that took 50 ms or less. Prometheus can estimate
+# percentiles from the buckets (for example "95% of requests finished within
+# X seconds") with histogram_quantile(). The buckets here are spread from
+# 10 ms to 2.5 s, which covers the expected range for this model.
+PREDICTION_LATENCY = Histogram(
+    "prediction_duration_seconds",
+    "Time spent processing a prediction request",
+    ["model_version"],
+    buckets=[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+)
+
+# Gauge: a value that can go up or down and is set to its current value
+# (here: how many models are loaded in memory).
+ACTIVE_MODELS = Gauge(
+    "active_models_loaded",
+    "Number of models currently loaded in memory",
+)
+
 
 # ---- Load models at startup ----
 # The models are loaded once, when this module is first imported, and kept
@@ -117,6 +179,10 @@ MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
 
 model_v1 = load_model(os.path.join(MODEL_DIR, "model_v1.pkl"))
 model_v2 = load_model(os.path.join(MODEL_DIR, "model_v2.pkl"))
+
+# Both models loaded successfully (load_model would have raised otherwise),
+# so set the gauge to 2.
+ACTIVE_MODELS.set(2)
 
 # Logger calls take a format string and its arguments separately; the
 # string is only built if the message is actually recorded.
@@ -188,6 +254,10 @@ def run_prediction(model, model_label, json_data):
     Validate, predict, and format results.
     Handles both single records and batches.
     """
+    # Note the start time so the full request handling time (validation,
+    # prediction and formatting) can be recorded in PREDICTION_LATENCY.
+    start_time = time.time()
+
     # Batch support: the client may send one JSON object (a dict) or a JSON
     # array of objects (a list). We turn both into a list of records so the
     # rest of the function has a single code path, and remember which form
@@ -201,6 +271,9 @@ def run_prediction(model, model_label, json_data):
     for record in records:
         error, status = validate_input(record)
         if error:
+            # .labels(...) picks the time series for this model and outcome;
+            # .inc() adds 1 to it.
+            PREDICTION_REQUESTS.labels(model_version=model_label, status="validation_error").inc()
             # Bad input is the client's problem, not a server failure, so it
             # is logged as a WARNING.
             logger.warning("Validation failed for %s: %s", model_label, error)
@@ -217,10 +290,18 @@ def run_prediction(model, model_label, json_data):
         # proba[i] is [P(class 0 = "No"), P(class 1 = "Yes")] for record i.
         proba = model.predict_proba(input_df)
     except Exception as e:
+        PREDICTION_REQUESTS.labels(model_version=model_label, status="error").inc()
         # A failure after validation points to a problem on our side, so it
         # is logged as an ERROR.
         logger.error("Prediction failed for %s: %s", model_label, str(e))
         return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+
+    # Success: count the request and record how long it took. Latency is
+    # only observed for successful requests, so failed ones do not distort
+    # the timing figures.
+    duration = time.time() - start_time
+    PREDICTION_REQUESTS.labels(model_version=model_label, status="success").inc()
+    PREDICTION_LATENCY.labels(model_version=model_label).observe(duration)
 
     # Build one result per record. yhat[i] is the predicted class (0 or 1);
     # using it as the column index, proba[i][yhat[i]] is the probability of
@@ -245,6 +326,19 @@ def run_prediction(model, model_label, json_data):
 
 
 # ---- Endpoints ----
+
+# The endpoint Prometheus scrapes. generate_latest() collects every metric
+# registered in this process (the automatic HTTP metrics from
+# PrometheusMetrics and the custom ones above) and serialises them in the
+# Prometheus text format, one line per time series, for example
+#     prediction_requests_total{model_version="v1",status="success"} 3.0
+# CONTENT_TYPE_LATEST is the matching Content-Type header, so Prometheus
+# knows how to parse the response. Returning a (body, status, headers)
+# tuple is Flask's way of setting the status code and headers directly.
+@app.route("/metrics", methods=["GET"])
+def prometheus_metrics():
+    """Expose Prometheus metrics."""
+    return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
 # The @app.route decorator connects a URL path and HTTP method to the Python
 # function below it. When a GET request arrives at /health, Flask calls
@@ -286,6 +380,7 @@ def info():
             "predict_v1": "POST /v1/predict",
             "predict_v2": "POST /v2/predict",
             "docs": "GET /apidocs/",
+            "metrics": "GET /metrics",
         },
         "required_input_format": {
             "numerical_features": NUMERICAL_FEATURES,

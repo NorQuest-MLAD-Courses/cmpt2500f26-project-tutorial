@@ -58,6 +58,11 @@ pytest.ini
 # Log files are written at run time to a mounted folder, not shipped in the image.
 logs/
 
+# Monitoring configs
+# Monitoring configuration is read by the monitoring containers through
+# bind mounts in docker-compose.yml; the API image does not need it.
+monitoring/
+
 # Documentation
 # README and other Markdown documentation.
 *.md

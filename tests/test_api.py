@@ -182,3 +182,25 @@ def test_prediction_is_logged(client, caplog):
                 if record.name == "churn_api"]
     assert any(level == "INFO" and "Prediction successful" in text for level, text in messages)
     assert any(level == "WARNING" and "Validation failed" in text for level, text in messages)
+
+
+# ---- Step 18: Prometheus metrics ----
+
+def test_metrics(client):
+    """GET /metrics returns Prometheus-format metrics."""
+    # /metrics returns plain text in the Prometheus format, not JSON, so
+    # the test reads the raw body. response.data is bytes, hence the b"..."
+    # strings. flask_http_request_* metrics come from PrometheusMetrics,
+    # which records every request automatically.
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert b"flask_http_request" in response.data
+
+
+def test_custom_prediction_counter(client):
+    """After a prediction, the custom counter increments."""
+    # Make one prediction, then check that the custom counter defined in
+    # app.py appears in the metrics output.
+    client.post("/v1/predict", json=VALID_PAYLOAD)
+    response = client.get("/metrics")
+    assert b"prediction_requests_total" in response.data

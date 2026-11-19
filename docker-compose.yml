@@ -72,6 +72,29 @@ services:
     # Restart automatically after a crash.
     restart: unless-stopped
 
+  # ---- prometheus: collects ("scrapes") metrics from the other services ----
+  # Open the Prometheus UI at http://localhost:9090.
+  prometheus:
+    # A ready-made image from Docker Hub, so there is no build: section. The
+    # version is pinned so that the stack behaves the same all term; a "latest"
+    # tag could change under you between labs.
+    image: prom/prometheus:v3.13.4
+    # Prometheus's web UI and query API.
+    ports:
+      - "9090:9090"
+    volumes:
+      # Mount our scrape configuration at the path where Prometheus looks for it.
+      # After editing it, restart the container to load the change.
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    # Start the API first, since it is the main target Prometheus scrapes.
+    depends_on:
+      - api
+    # On the shared network Prometheus reaches the API at api:5000.
+    networks:
+      - ml-network
+    # Restart automatically after a crash.
+    restart: unless-stopped
+
 # Named volumes used by the services above. Docker stores them outside the
 # project folder; `docker compose down` keeps them, while
 # `docker compose down -v` deletes them (and the data inside).

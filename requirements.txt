@@ -44,3 +44,10 @@ flasgger
 # gunicorn: a production web server that runs the Flask app inside the
 # Docker container. Flask's built-in server is meant for development only.
 gunicorn
+
+# ---- Monitoring ----
+# prometheus-client: the official Prometheus library for Python. It defines
+# Counter, Histogram and Gauge metrics and serves them for Prometheus to scrape.
+prometheus-client
+# prometheus_flask_exporter: adds standard HTTP request metrics to the Flask app.
+prometheus_flask_exporter

@@ -1,0 +1,31 @@
+# Prometheus configuration. docker-compose.yml mounts this file into the
+# prometheus container at /etc/prometheus/prometheus.yml, the path
+# Prometheus reads at start-up. Restart the container after editing it.
+# Prometheus works by "scraping": every few seconds it sends an HTTP GET to
+# each target's metrics URL, reads the current metric values and stores
+# them with a timestamp. Check the state of each target at
+# http://localhost:9090/targets.
+# Reference: https://prometheus.io/docs/prometheus/latest/configuration/configuration/
+
+# Defaults for every job below, unless a job sets its own value.
+global:
+  # How often to scrape each target.
+  scrape_interval: 15s
+  # How often to evaluate rules (such as alert rules).
+  evaluation_interval: 15s
+
+# One entry per job. A job is a group of targets that expose the same kind
+# of metrics; Prometheus adds a job="..." label to every series it scrapes.
+scrape_configs:
+  # ---- The Flask prediction API ----
+  - job_name: "churn-api"
+    # Scrape every 5 seconds instead of the global 15s, for finer-grained API
+    # data. No scrape_timeout is set, so the default applies (10s, but never
+    # longer than the scrape interval, so 5s here).
+    scrape_interval: 5s
+    # The URL path where app.py serves its metrics (this is also the default).
+    metrics_path: /metrics
+    # A fixed list of targets as host:port. Inside the Compose network the
+    # service name "api" resolves to the API container.
+    static_configs:
+      - targets: ["api:5000"]
