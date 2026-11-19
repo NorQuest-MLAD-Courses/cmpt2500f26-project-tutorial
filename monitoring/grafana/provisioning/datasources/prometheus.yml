@@ -1,0 +1,23 @@
+# Grafana data source provisioning. Grafana reads every file in
+# /etc/grafana/provisioning/datasources/ at start-up (docker-compose.yml
+# mounts monitoring/grafana/provisioning there) and creates the data
+# sources listed, so you do not have to add Prometheus by hand in the UI.
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+# Version of the provisioning file format.
+apiVersion: 1
+
+# The data sources to create.
+datasources:
+  # The name shown in Grafana. Dashboard panels refer to the data source.
+  - name: Prometheus
+    # Which kind of data source this is (Grafana's built-in Prometheus plug-in).
+    type: prometheus
+    # proxy: the Grafana server sends the queries to Prometheus, not your
+    # browser. That is needed here because the address below works only
+    # inside the Compose network.
+    access: proxy
+    # Prometheus's address on the Compose network (service name prometheus, port 9090).
+    url: http://prometheus:9090
+    # Use this data source when a panel does not name one.
+    isDefault: true

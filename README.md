@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, and Prometheus metrics.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, Prometheus metrics, and Grafana dashboards.
 
 ## Contents
 
@@ -259,6 +259,7 @@ make compose-down   # stop and remove the containers
 | `api` | http://localhost:5000 | Prediction API |
 | `mlflow` | http://localhost:5001 | MLflow tracking server and UI |
 | `prometheus` | http://localhost:9090 | Metrics collection and alerting (`prom/prometheus:v3.13.4`) |
+| `grafana` | http://localhost:3000 | Dashboards (login admin / admin) (`grafana/grafana:12.4.12`) |
 
 In Codespaces, open each port from the Ports tab.
 
@@ -320,6 +321,13 @@ Prometheus (http://localhost:9090) scrapes these targets (Status, Targets shows 
 
 The API exposes its metrics at `/metrics`.
 
+### Grafana
+
+Grafana (http://localhost:3000, login admin / admin) is provisioned automatically with Prometheus as its data source and these dashboards in the folder ML Monitoring:
+
+- API Performance: Request Rate (requests/sec), Response Latency (p50 / p95 / p99), Error Rate (4xx + 5xx / total), Prediction Requests by Model Version, Prediction Latency by Model Version
+- Training Monitoring: Training vs Validation Accuracy, Training vs Validation F1, CPU Usage During Training, Memory Usage During Training, Top Feature Importances, Training Epochs Completed
+
 ## Project structure
 
 ```
@@ -342,6 +350,15 @@ The API exposes its metrics at `/metrics`.
 │   ├── model_v1.pkl.dvc                             # DVC pointer for the best tuned model
 │   └── model_v2.pkl.dvc                             # DVC pointer for the second-best tuned model
 ├── monitoring/
+│   ├── grafana/
+│   │   ├── dashboards/
+│   │   │   ├── api-dashboard.json                   # API Performance dashboard
+│   │   │   └── training-dashboard.json              # Training Monitoring dashboard
+│   │   └── provisioning/
+│   │       ├── dashboards/
+│   │       │   └── dashboards.yml                   # Grafana dashboard provider
+│   │       └── datasources/
+│   │           └── prometheus.yml                   # Grafana data source
 │   └── prometheus.yml                               # Prometheus scrape configuration
 ├── notebooks/
 │   └── proof_of_concept.ipynb                       # Original proof-of-concept notebook
@@ -428,5 +445,6 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [GitHub Actions](https://docs.github.com/en/actions)
 - [Prometheus documentation](https://prometheus.io/docs/)
 - [prometheus_flask_exporter](https://github.com/rycus86/prometheus_flask_exporter)
+- [Grafana provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.

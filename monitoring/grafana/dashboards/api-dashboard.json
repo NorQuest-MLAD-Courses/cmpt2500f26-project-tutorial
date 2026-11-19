@@ -1,0 +1,53 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "title": "Request Rate (requests/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "rate(flask_http_request_total[1m])", "legendFormat": "{{method}} {{handler}} {{status}}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "title": "Response Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(flask_http_request_duration_seconds_bucket[1m]))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, rate(flask_http_request_duration_seconds_bucket[1m]))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, rate(flask_http_request_duration_seconds_bucket[1m]))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "title": "Error Rate (4xx + 5xx / total)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "sum(rate(flask_http_request_total{status=~\"4..|5..\"}[1m])) / sum(rate(flask_http_request_total[1m]))", "legendFormat": "error rate", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "title": "Prediction Requests by Model Version",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "rate(prediction_requests_total[1m])", "legendFormat": "{{model_version}} ({{status}})", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "title": "Prediction Latency by Model Version",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(prediction_duration_seconds_bucket[1m]))", "legendFormat": "p95 {{model_version}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["api", "monitoring"],
+  "time": { "from": "now-30m", "to": "now" },
+  "title": "API Performance",
+  "uid": "api-performance",
+  "version": 1
+}

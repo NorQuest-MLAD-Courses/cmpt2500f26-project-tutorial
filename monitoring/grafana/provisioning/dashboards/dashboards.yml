@@ -1,0 +1,29 @@
+# Grafana dashboard provisioning. Grafana reads every file in
+# /etc/grafana/provisioning/dashboards/ at start-up. This file defines a
+# "provider" that loads dashboard JSON files from a folder, so the
+# dashboards appear without being imported by hand.
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+# Version of the provisioning file format.
+apiVersion: 1
+
+# A list of dashboard providers; we need only one.
+providers:
+  # A name for this provider (any unique name).
+  - name: "default"
+    # The Grafana organisation to load the dashboards into (1 is the default one).
+    orgId: 1
+    # The dashboard folder in the Grafana UI that holds these dashboards.
+    folder: "ML Monitoring"
+    # file: read dashboards from JSON files on disk.
+    type: file
+    # false: dashboards can be deleted in the UI (a deleted one returns on the next scan while its file exists).
+    disableDeletion: false
+    # Check the folder for new or changed JSON files every 30 seconds.
+    updateIntervalSeconds: 30
+    # Settings for the file provider.
+    options:
+      # Where the JSON files are: docker-compose.yml mounts monitoring/grafana/dashboards here.
+      path: /etc/grafana/dashboards
+      # false: put all dashboards in the folder named above, ignoring subfolders on disk.
+      foldersFromFilesStructure: false

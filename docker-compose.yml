@@ -95,10 +95,45 @@ services:
     # Restart automatically after a crash.
     restart: unless-stopped
 
+  # ---- grafana: dashboards built on the metrics stored in Prometheus ----
+  # Open Grafana at http://localhost:3000.
+  grafana:
+    # Pinned Grafana version, for the same reason as the Prometheus image.
+    image: grafana/grafana:12.4.12
+    # Grafana's web interface.
+    ports:
+      - "3000:3000"
+    volumes:
+      # Provisioning files tell Grafana at start-up which data source and which
+      # dashboards to load, so nothing has to be set up by hand in the UI.
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      # The dashboard JSON files. The dashboard provider in provisioning reads
+      # them from this path.
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
+      # Named volume for Grafana's own database (users, settings, changes made
+      # in the UI), so they survive container restarts.
+      - grafana-data:/var/lib/grafana
+    # The admin login (user admin, password admin). This is acceptable only for
+    # local development; never use default credentials on a server that other
+    # people can reach.
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    # Start Prometheus first, since it is Grafana's data source.
+    depends_on:
+      - prometheus
+    # On the shared network Grafana reaches Prometheus at prometheus:9090.
+    networks:
+      - ml-network
+    # Restart automatically after a crash.
+    restart: unless-stopped
+
 # Named volumes used by the services above. Docker stores them outside the
 # project folder; `docker compose down` keeps them, while
 # `docker compose down -v` deletes them (and the data inside).
 volumes:
+  # Grafana's internal database.
+  grafana-data:
   # MLflow's tracking database and artifacts.
   mlflow-data:
 

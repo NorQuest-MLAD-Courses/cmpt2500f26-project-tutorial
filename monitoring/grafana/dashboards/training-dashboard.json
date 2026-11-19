@@ -1,0 +1,60 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "panels": [
+    {
+      "title": "Training vs Validation Accuracy",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "training_accuracy", "legendFormat": "Train Accuracy", "refId": "A" },
+        { "expr": "validation_accuracy", "legendFormat": "Val Accuracy", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "title": "Training vs Validation F1",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "training_f1_score", "legendFormat": "Train F1", "refId": "A" },
+        { "expr": "validation_f1_score", "legendFormat": "Val F1", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] }
+    },
+    {
+      "title": "CPU Usage During Training",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "training_cpu_usage_percent", "legendFormat": "CPU %", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] }
+    },
+    {
+      "title": "Memory Usage During Training",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "training_memory_usage_bytes / 1024 / 1024", "legendFormat": "Memory (MB)", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "decmbytes" }, "overrides": [] }
+    },
+    {
+      "title": "Top Feature Importances",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [{ "expr": "topk(5, feature_importance)", "legendFormat": "{{feature_name}}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "min": 0 }, "overrides": [] }
+    },
+    {
+      "title": "Training Epochs Completed",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [{ "expr": "training_epochs_completed_total", "legendFormat": "Epochs", "refId": "A" }],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["training", "monitoring"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Training Monitoring",
+  "uid": "training-monitoring",
+  "version": 1
+}
