@@ -76,6 +76,8 @@ Searches over gradient boosting, random forest and logistic regression settings,
 
 The two models are tracked with DVC. After a new search you want to keep, run `.venv/bin/dvc add models/model_v1.pkl models/model_v2.pkl`, commit the two `.dvc` files and run `make dvc-push`.
 
+While it runs, `tune.py` publishes training metrics for Prometheus on port 8002 (`--metrics-port` changes it).
+
 ### Command-line options
 
 Every script reads `config/default.yaml` (or the file given with `--config`). Options left out fall back to the config file, so a flag only overrides one setting for one run. Example:
@@ -127,6 +129,7 @@ Every script reads `config/default.yaml` (or the file given with `--config`). Op
 |---|---|---|
 | `--config` | `config/default.yaml` | Path to YAML config file |
 | `--experiment-name` | `churn-tuning` | MLflow experiment to log the search runs to |
+| `--metrics-port` | `8002` | Port for the Prometheus training-metrics server |
 
 ## Configuration
 
@@ -153,13 +156,14 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 24 tests with pytest (configured in `pytest.ini`):
+Runs 27 tests with pytest (configured in `pytest.ini`):
 
 - `tests/test_api.py`: 11 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
+- `tests/test_monitoring.py`: 2 tests. Tests for the training monitor in src/utils/monitoring.py.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 5 tests. Tests for the training module.
-- `tests/test_tune.py`: 2 tests. Tests for the hyperparameter-tuning module.
+- `tests/test_tune.py`: 3 tests. Tests for the hyperparameter-tuning module.
 
 The API tests load `models/model_v1.pkl` and `models/model_v2.pkl`, so get the models first (`make dvc-pull` or `make tune`).
 
@@ -312,6 +316,7 @@ Add these repository secrets under Settings, Secrets and variables, Actions:
 Prometheus (http://localhost:9090) scrapes these targets (Status, Targets shows their state):
 
 - `churn-api` at `api:5000`: API metrics: request counts and latency per route, plus `prediction_requests_total`, `prediction_duration_seconds` and `active_models_loaded`
+- `model-training` at `trainer:8002`: training metrics from `tune.py`; UP only while `make compose-tune` runs
 
 The API exposes its metrics at `/metrics`.
 
@@ -343,7 +348,8 @@ The API exposes its metrics at `/metrics`.
 ├── src/
 │   ├── utils/
 │   │   ├── __init__.py                              # Marks the folder as a Python package
-│   │   └── config.py                                # Load a YAML configuration file and return it as a dictionary
+│   │   ├── config.py                                # Load a YAML configuration file and return it as a dictionary
+│   │   └── monitoring.py                            # Prometheus metrics for training processes
 │   ├── app.py                                       # Flask REST API for the churn prediction service
 │   ├── evaluate.py                                  # Load a saved pipeline and evaluate it on the test split
 │   ├── predict.py                                   # Load a saved pipeline and print predictions for new data
@@ -353,6 +359,7 @@ The API exposes its metrics at `/metrics`.
 ├── tests/
 │   ├── test_api.py                                  # Automated tests for the Flask API endpoints
 │   ├── test_config.py                               # Tests for the config loader
+│   ├── test_monitoring.py                           # Tests for the training monitor in src/utils/monitoring.py
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
 │   ├── test_train.py                                # Tests for the training module
 │   └── test_tune.py                                 # Tests for the hyperparameter-tuning module

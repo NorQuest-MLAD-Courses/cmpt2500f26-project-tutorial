@@ -23,12 +23,16 @@ How to run (from the project root; takes a few minutes):
 Input:  the raw CSV (paths.raw_data in config/default.yaml), cleaned with
         load_and_clean() from preprocess.py
 Output: models/model_v1.pkl (best F1) and models/model_v2.pkl (second best),
-        plus one MLflow run per candidate in the "churn-tuning" experiment
+        plus one MLflow run per candidate in the "churn-tuning" experiment,
+        and live training metrics for Prometheus at http://<host>:8002/metrics
+        while the search runs (port set with --metrics-port)
 """
 
 import argparse
 import os
 import pickle
+# time.time() is used to report how long the search has been running.
+import time
 # product() yields every combination of several lists, which turns a grid of
 # hyperparameter values into the list of candidates to try.
 from itertools import product
@@ -43,6 +47,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 
 from utils.config import load_config
+# TrainingMonitor (src/utils/monitoring.py) publishes training metrics over
+# HTTP so Prometheus can collect them while the search runs.
+from utils.monitoring import TrainingMonitor
 # Reuse the cleaning step from preprocess.py so both scripts clean the data in
 # the same way. Importing it does not run preprocess.main(), thanks to the
 # `if __name__ == "__main__"` guard in that file.
@@ -131,12 +138,42 @@ CANDIDATES = {
 }
 
 
+def feature_importances(pipeline):
+    """Map each input column to its importance in the fitted classifier.
+
+    Args:
+        pipeline: a fitted pipeline from build_deployment_pipeline().
+
+    Returns:
+        A dict {column name: importance}, ready for
+        TrainingMonitor.record_feature_importance().
+    """
+    # named_steps gives access to a pipeline step by the name we gave it.
+    # Tree ensembles (gradient boosting, random forest) provide
+    # feature_importances_. Logistic regression has no such attribute, so we
+    # use the absolute value of each coefficient instead: a larger weight,
+    # positive or negative, means the feature has more influence.
+    # coef_[0] is the single row of weights for our two-class problem.
+    # The classifier sees the columns in ColumnTransformer output order
+    # (numeric first, then categorical), which is NUM_COLS + CAT_COLS, so
+    # zip() pairs each value with the right column name.
+    classifier = pipeline.named_steps["classifier"]
+    if hasattr(classifier, "feature_importances_"):
+        values = classifier.feature_importances_
+    else:  # linear models: use the size of each coefficient
+        values = abs(classifier.coef_[0])
+    return dict(zip(NUM_COLS + CAT_COLS, values))
+
+
 def parse_args():
     """Read command-line options.
 
     Returns:
-        An argparse.Namespace with .config and .experiment_name.
+        An argparse.Namespace with .config, .experiment_name and
+        .metrics_port.
     """
+    # --metrics-port lets two searches on one machine use different ports
+    # for their Prometheus metrics servers.
     # The search logs to its own "churn-tuning" experiment by default, so its
     # many runs stay separate from the regular train.py runs.
     parser = argparse.ArgumentParser(description="Hyperparameter search.")
@@ -144,6 +181,8 @@ def parse_args():
                         help="Path to YAML config file")
     parser.add_argument("--experiment-name", default="churn-tuning",
                         help="MLflow experiment to log the search runs to")
+    parser.add_argument("--metrics-port", type=int, default=8002,
+                        help="Port for the Prometheus training-metrics server")
     return parser.parse_args()
 
 
@@ -180,6 +219,16 @@ def main():
         random_state=cfg["training"]["random_state"],
         stratify=y,
     )
+
+    # Expose training metrics for Prometheus while the search runs.
+    # start() launches a small HTTP server on its own port (8002 by default,
+    # separate from the Flask API on 5000) plus a background thread that
+    # records CPU and memory use. Prometheus scrapes this server; in Docker
+    # Compose it reaches it as trainer:8002, because make compose-tune names
+    # the container "trainer". start_time marks the start of the search.
+    monitor = TrainingMonitor(port=args.metrics_port)
+    monitor.start()
+    start_time = time.time()
 
     # One entry per candidate, used afterwards to rank them.
     results = []
@@ -227,6 +276,20 @@ def main():
                     pipeline, name="model", skops_trusted_types=trusted_types
                 )
 
+                # ---- Publish this candidate's scores to Prometheus ----
+                # Each candidate counts as one "epoch" for the monitor.
+                # record_epoch() increments the epoch counter and sets the
+                # accuracy and F1 gauges. "train" scores are on the training
+                # split; "val" scores are the test-split scores computed
+                # above. A large gap between them is a sign of overfitting.
+                # set_duration() updates the elapsed-time gauge.
+                train_yhat = pipeline.predict(X_train)
+                monitor.record_epoch(
+                    train_acc=accuracy_score(y_train, train_yhat), val_acc=acc,
+                    train_f1=f1_score(y_train, train_yhat), val_f1=f1,
+                )
+                monitor.set_duration(time.time() - start_time)
+
                 # Keep the fitted pipeline in memory so the best ones can be
                 # saved after the loop without retraining.
                 print(f"  {params} → acc={acc:.4f}  f1={f1:.4f}")
@@ -237,6 +300,11 @@ def main():
                     "f1_score": f1,
                     "pipeline": pipeline,
                 })
+                # The feature-importance gauges always show the best model
+                # found so far (the "leader" by F1). The monitor keeps only
+                # the top five features.
+                leader = max(results, key=lambda r: r["f1_score"])
+                monitor.record_feature_importance(feature_importances(leader["pipeline"]))
 
     # Rank by F1 and save top two.
     # F1 is used instead of accuracy because churners are the minority class:
@@ -252,6 +320,10 @@ def main():
             pickle.dump(best["pipeline"], f)
         print(f"\nSaved {label}: {best['model_name']} "
               f"(f1={best['f1_score']:.4f}) → {out_path}")
+
+    # Stop the background thread that records CPU and memory use. The
+    # metrics server itself ends when the script exits.
+    monitor.stop()
 
 
 # Run main() only when executed as a script, not when imported.

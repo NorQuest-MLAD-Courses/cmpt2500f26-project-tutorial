@@ -51,3 +51,5 @@ gunicorn
 prometheus-client
 # prometheus_flask_exporter: adds standard HTTP request metrics to the Flask app.
 prometheus_flask_exporter
+# psutil: reads CPU and memory usage of the training process for the training metrics.
+psutil

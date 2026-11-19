@@ -208,8 +208,11 @@ compose-train:
 # make compose-tune
 # Runs the tuning script inside a one-off api container (removed afterwards
 # by --rm), logging to the MLflow container.
+# --name trainer gives the container a fixed name. Prometheus scrapes the
+# tuning metrics from trainer:8002, and inside the Compose network Docker
+# resolves that container name like a service name.
 compose-tune:
-	docker compose run --rm api python src/tune.py
+	docker compose run --rm --name trainer api python src/tune.py
 
 # make docker-tag DOCKER_USER=<your-docker-hub-username>
 # (or: DOCKER_USER=<your-username> make docker-tag)

@@ -29,3 +29,20 @@ scrape_configs:
     # service name "api" resolves to the API container.
     static_configs:
       - targets: ["api:5000"]
+
+  # ---- The tuning script (src/tune.py) ----
+  # While it runs, tune.py serves training metrics on port 8002.
+  - job_name: "model-training"
+    # Scrape every 5 seconds; a tuning run is short.
+    scrape_interval: 5s
+    # The metrics URL path served by the training monitor (src/utils/monitoring.py).
+    metrics_path: /metrics
+    # "trainer" is the container name that `make compose-tune` gives the
+    # tuning container (--name trainer). The container exists only while
+    # tuning runs, so this target shows as DOWN between runs. That is expected.
+    static_configs:
+      - targets: ["trainer:8002"]
+    # Give up on a scrape after 3 seconds (it must not exceed scrape_interval).
+    # The short timeout stops Prometheus from waiting on the missing target
+    # between tuning runs.
+    scrape_timeout: 3s

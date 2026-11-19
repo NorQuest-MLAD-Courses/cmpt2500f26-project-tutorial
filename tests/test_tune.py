@@ -6,6 +6,8 @@ This file checks these things in ``src/tune.py``:
   values the API receives (for example "One year") and can score a value it
   never saw during training;
 * ``parse_args`` logs to the churn-tuning experiment by default.
+* ``feature_importances`` maps every input column to a non-negative
+  importance, for both tree models and logistic regression.
 
 Run it from the project root with::
 
@@ -17,6 +19,7 @@ names, so they run in a second and need no data files.
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 import sys, os
 
@@ -24,7 +27,7 @@ import sys, os
 # by default. Prepending it to sys.path lets us write `from tune import ...`.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from tune import build_deployment_pipeline, parse_args, NUM_COLS, CAT_COLS
+from tune import build_deployment_pipeline, parse_args, feature_importances, NUM_COLS, CAT_COLS
 
 
 def make_raw_data(n=200):
@@ -66,3 +69,19 @@ def test_parse_args_defaults(monkeypatch):
     monkeypatch.setattr("sys.argv", ["tune.py"])
     args = parse_args()
     assert args.experiment_name == "churn-tuning"
+    # The training-metrics server for Prometheus listens on port 8002.
+    assert args.metrics_port == 8002
+
+
+def test_feature_importances_cover_every_column():
+    """feature_importances returns one non-negative value per input column."""
+    X, y = make_raw_data()
+    # A tree model has feature_importances_; logistic regression has coef_,
+    # which the helper turns into absolute values. Check both kinds.
+    for classifier in (RandomForestClassifier(n_estimators=10, random_state=0),
+                       LogisticRegression(max_iter=1000)):
+        pipeline = build_deployment_pipeline(classifier, NUM_COLS, CAT_COLS)
+        pipeline.fit(X, y)
+        importances = feature_importances(pipeline)
+        assert set(importances) == set(NUM_COLS + CAT_COLS)
+        assert all(value >= 0 for value in importances.values())
