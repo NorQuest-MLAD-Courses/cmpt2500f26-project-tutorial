@@ -152,12 +152,13 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 15 tests with pytest (configured in `pytest.ini`):
+Runs 22 tests with pytest (configured in `pytest.ini`):
 
-- `tests/test_api.py`: 8 tests. Automated tests for the Flask API endpoints.
+- `tests/test_api.py`: 9 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
-- `tests/test_train.py`: 1 test. Minimal tests for the training module.
+- `tests/test_train.py`: 5 tests. Tests for the training module.
+- `tests/test_tune.py`: 2 tests. Tests for the hyperparameter-tuning module.
 
 The API tests load `models/model_v1.pkl` and `models/model_v2.pkl`, so get the models first (`make dvc-pull` or `make tune`).
 
@@ -338,7 +339,8 @@ Add these repository secrets under Settings, Secrets and variables, Actions:
 │   ├── test_api.py                                  # Automated tests for the Flask API endpoints
 │   ├── test_config.py                               # Tests for the config loader
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
-│   └── test_train.py                                # Minimal tests for the training module
+│   ├── test_train.py                                # Tests for the training module
+│   └── test_tune.py                                 # Tests for the hyperparameter-tuning module
 ├── .dockerignore                                    # Files kept out of Docker builds
 ├── .dvcignore                                       # Files DVC should ignore
 ├── .gitignore                                       # Files Git should not track

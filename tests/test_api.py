@@ -18,6 +18,8 @@ models/model_v2.pkl, so those files must be present (for example after
 a made-up customer (VALID_PAYLOAD below).
 """
 
+import logging
+
 import pytest
 # `src.app` can be imported because pytest.ini sets `pythonpath = .`, which
 # puts the project root on the import path. The Flask object is renamed to
@@ -162,3 +164,21 @@ def test_info(client):
     assert "numerical_features" in response.json["required_input_format"]
     assert "categorical_features" in response.json["required_input_format"]
     assert "example" in response.json["required_input_format"]
+
+
+# ---- Step 15: Logging ----
+
+def test_prediction_is_logged(client, caplog):
+    """A good request logs an INFO message and a bad one logs a WARNING."""
+    # caplog is a built-in pytest fixture that collects log messages while
+    # the test runs. (pytest replaces the app's log handlers during tests, so
+    # we check the messages themselves, not the logs/api.log file.)
+    caplog.set_level(logging.INFO, logger="churn_api")
+
+    client.post("/v1/predict", json=VALID_PAYLOAD)
+    client.post("/v1/predict", json={"tenure": 12})
+
+    messages = [(record.levelname, record.getMessage()) for record in caplog.records
+                if record.name == "churn_api"]
+    assert any(level == "INFO" and "Prediction successful" in text for level, text in messages)
+    assert any(level == "WARNING" and "Validation failed" in text for level, text in messages)
