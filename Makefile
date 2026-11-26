@@ -22,7 +22,7 @@ SHELL := /bin/bash
 # file or folder with the same name as a target (for example "clean") in the
 # project root would make Make think the target is already up to date, and
 # it would skip the recipe. Every new target is added to this list.
-.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop compose-up compose-down compose-train compose-tune docker-tag docker-push deploy clean
+.PHONY: setup venv preprocess train tune evaluate predict test api mlflow-ui dvc-push dvc-pull docker-build docker-run docker-stop compose-up compose-down compose-train compose-tune docker-tag docker-push deploy drift compose-drift clean
 
 # make venv
 # Creates the project's virtual environment in .venv/ and installs every
@@ -250,6 +250,20 @@ deploy:
 		--port 5000 \
 		--allow-unauthenticated
 
+
+# make drift
+# Runs the Evidently data-drift check (src/drift.py) on your machine and
+# writes an HTML report to reports/.
+drift:
+	.venv/bin/python src/drift.py
+
+# make compose-drift
+# Runs the same drift check inside a one-off api container.
+# -v ./reports:/app/reports bind-mounts your project's reports/ folder into
+# the container, so the report written inside it appears on your machine.
+compose-drift:
+	docker compose run --rm -v ./reports:/app/reports api python src/drift.py
+
 # make clean
 # Deletes generated files so you can start again from a clean state:
 #   .venv              the virtual environment (recreate it with `make venv`)
@@ -257,5 +271,6 @@ deploy:
 #   data/processed/*.csv  processed data (recreate it with `make preprocess`)
 #   mlflow.db mlruns/  the local MLflow tracking database and artifact folder
 #   logs/              API log files
+#   reports/           drift reports
 clean:
-	rm -rf .venv models/*.pkl data/processed/*.csv mlflow.db mlruns/ logs/
+	rm -rf .venv models/*.pkl data/processed/*.csv mlflow.db mlruns/ logs/ reports/

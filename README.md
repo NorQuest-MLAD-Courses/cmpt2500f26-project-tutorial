@@ -2,7 +2,7 @@
 
 Predicts whether a telecom customer will churn (cancel their service) from account and service details, using the IBM Telco Customer Churn dataset (7,043 customers, 21 columns).
 
-The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, Prometheus metrics, Grafana dashboards, and alert rules.
+The project includes a command-line training pipeline (preprocess, train, evaluate, predict), automated tests with pytest, YAML configuration, experiment tracking with MLflow, data and model versioning with DVC and DagsHub, a hyperparameter search that produces two deployment-ready models, a Flask REST API that serves both models, Docker images, a Docker Compose stack, deployment to Google Cloud Run, CI/CD with GitHub Actions, Prometheus metrics, Grafana dashboards, alert rules, and data drift detection with Evidently.
 
 ## Contents
 
@@ -19,6 +19,7 @@ The project includes a command-line training pipeline (preprocess, train, evalua
 - [Cloud deployment (Google Cloud Run)](#cloud-deployment-google-cloud-run)
 - [CI/CD (GitHub Actions)](#cicd-github-actions)
 - [Monitoring](#monitoring)
+- [Data drift detection](#data-drift-detection)
 - [Project structure](#project-structure)
 - [Make targets](#make-targets)
 - [References](#references)
@@ -156,10 +157,11 @@ To try different settings, copy the file (for example to `config/experiment.yaml
 make test
 ```
 
-Runs 27 tests with pytest (configured in `pytest.ini`):
+Runs 29 tests with pytest (configured in `pytest.ini`):
 
 - `tests/test_api.py`: 11 tests. Automated tests for the Flask API endpoints.
 - `tests/test_config.py`: 2 tests. Tests for the config loader.
+- `tests/test_drift.py`: 2 tests. Tests for the drift simulation in src/drift.py.
 - `tests/test_monitoring.py`: 2 tests. Tests for the training monitor in src/utils/monitoring.py.
 - `tests/test_preprocess.py`: 4 tests. Minimal tests for the preprocessing module.
 - `tests/test_train.py`: 5 tests. Tests for the training module.
@@ -272,6 +274,8 @@ make compose-tune
 
 The MLflow server keeps its database and model files in the named volume `mlflow-data`, separate from your local `mlflow.db`. To send a local run to the server, set `MLFLOW_TRACKING_URI=http://localhost:5001` for that command.
 
+`make compose-drift` runs the drift report inside the API container (see [Data drift detection](#data-drift-detection)).
+
 ### Publishing images
 
 ```bash
@@ -339,6 +343,21 @@ Alert rules in `monitoring/rules/ml_alerts.yml` (see http://localhost:9090/alert
 | `APIDown` | Churn API is down (for 1m) |
 | `HighTrainingMemory` | High memory usage during training (for 5m) |
 
+## Data drift detection
+
+```bash
+make drift           # run locally
+make compose-drift   # run inside the API container
+```
+
+Compares a reference dataset with current data using [Evidently](https://docs.evidentlyai.com/) and writes an HTML report to `reports/` (git-ignored). Options:
+
+| Option | Default | Description |
+|---|---|---|
+| `--config` | `config/default.yaml` | Path to YAML config file |
+| `--current` | not set | Path to current (production) data CSV. If not provided, the script simulates drift by perturbing the reference data. |
+| `--output` | `reports/drift_report.html` | Path to save the HTML report. |
+
 ## Project structure
 
 ```
@@ -381,6 +400,7 @@ Alert rules in `monitoring/rules/ml_alerts.yml` (see http://localhost:9090/alert
 │   │   ├── config.py                                # Load a YAML configuration file and return it as a dictionary
 │   │   └── monitoring.py                            # Prometheus metrics for training processes
 │   ├── app.py                                       # Flask REST API for the churn prediction service
+│   ├── drift.py                                     # Generate a data drift report comparing reference and current data
 │   ├── evaluate.py                                  # Load a saved pipeline and evaluate it on the test split
 │   ├── predict.py                                   # Load a saved pipeline and print predictions for new data
 │   ├── preprocess.py                                # Load raw data, clean it, encode categoricals, and save processed data
@@ -389,6 +409,7 @@ Alert rules in `monitoring/rules/ml_alerts.yml` (see http://localhost:9090/alert
 ├── tests/
 │   ├── test_api.py                                  # Automated tests for the Flask API endpoints
 │   ├── test_config.py                               # Tests for the config loader
+│   ├── test_drift.py                                # Tests for the drift simulation in src/drift.py
 │   ├── test_monitoring.py                           # Tests for the training monitor in src/utils/monitoring.py
 │   ├── test_preprocess.py                           # Minimal tests for the preprocessing module
 │   ├── test_train.py                                # Tests for the training module
@@ -433,6 +454,8 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 | `make docker-tag` | (or. |
 | `make docker-push` | Uploads both tagged images to Docker Hub. |
 | `make deploy` | Deploys the API image from Docker Hub to Google Cloud Run. |
+| `make drift` | Runs the Evidently data-drift check (src/drift.py) on your machine and writes an HTML report to reports/. |
+| `make compose-drift` | Runs the same drift check inside a one-off api container. |
 | `make clean` | Deletes generated files so you can start again from a clean state. |
 
 ## References
@@ -459,5 +482,6 @@ Files under `data/` and the tuned models are downloaded with `make dvc-pull`.
 - [Prometheus documentation](https://prometheus.io/docs/)
 - [prometheus_flask_exporter](https://github.com/rycus86/prometheus_flask_exporter)
 - [Grafana provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/)
+- [Evidently](https://docs.evidentlyai.com/)
 
 The dataset is IBM sample data distributed on Kaggle by user blastchar. The proof-of-concept notebook is by Bharti Prasad (Kaggle user bhartiprasad17); it is the starting point that this project refactors, not original course work.

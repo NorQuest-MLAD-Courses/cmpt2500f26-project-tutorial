@@ -6,7 +6,11 @@
 
 # ---- Data handling and machine learning ----
 # pandas: reads the CSV file and holds the data in DataFrames.
-pandas
+# Kept below 3.1 for now: the current evidently release (see Data drift
+# below) still imports a pandas helper that pandas 3.1 removed, so with
+# pandas 3.1 `make drift` fails with an ImportError. Remove the limit once
+# a newer evidently release works with pandas 3.1.
+pandas<3.1
 # numpy: fast numerical arrays; pandas and scikit-learn are built on it.
 numpy
 # scikit-learn: preprocessing, models, pipelines and evaluation metrics.
@@ -53,3 +57,7 @@ prometheus-client
 prometheus_flask_exporter
 # psutil: reads CPU and memory usage of the training process for the training metrics.
 psutil
+
+# ---- Data drift ----
+# evidently: compares new data with the training data and builds the drift report.
+evidently
