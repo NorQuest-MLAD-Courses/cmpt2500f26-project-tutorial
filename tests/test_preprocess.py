@@ -18,14 +18,11 @@ check, such as a customer with ``tenure == 0`` and a blank ``TotalCharges``.
 """
 
 import pandas as pd
-import sys, os
 
-# Allow imports from src/.
-# The modules under test live in src/, which is not on Python's import path
-# by default. Prepending it to sys.path lets us write `from preprocess import ...`
-# below, exactly as the scripts in src/ import each other.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+# `preprocess` lives in src/. pytest.ini sets `pythonpath = . src`, which puts
+# both the project root and src/ on the import path while tests run, so this
+# plain import works without any sys.path changes in the test file.
 from preprocess import load_and_clean, encode_categoricals
 
 

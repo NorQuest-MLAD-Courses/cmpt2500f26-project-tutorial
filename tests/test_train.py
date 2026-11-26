@@ -27,14 +27,12 @@ afterwards, so they never touch your own mlflow.db.
 
 import numpy as np
 import pandas as pd
+import os
 import yaml
 from mlflow.tracking import MlflowClient
-import sys, os
 
-# The module under test lives in src/, which is not on Python's import path
-# by default. Prepending it to sys.path lets us write `from train import ...`.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
+# `train` lives in src/. pytest.ini sets `pythonpath = . src`, so src/ is on
+# the import path while tests run and this plain import works.
 from train import build_pipeline, parse_args, main
 
 # The shipped config file, found relative to this test file so the tests do

@@ -399,6 +399,7 @@ Compares a reference dataset with current data using [Evidently](https://docs.ev
 │   │   ├── __init__.py                              # Marks the folder as a Python package
 │   │   ├── config.py                                # Load a YAML configuration file and return it as a dictionary
 │   │   └── monitoring.py                            # Prometheus metrics for training processes
+│   ├── __init__.py                                  # Marks the folder as a Python package
 │   ├── app.py                                       # Flask REST API for the churn prediction service
 │   ├── drift.py                                     # Generate a data drift report comparing reference and current data
 │   ├── evaluate.py                                  # Load a saved pipeline and evaluate it on the test split
@@ -407,6 +408,7 @@ Compares a reference dataset with current data using [Evidently](https://docs.ev
 │   ├── train.py                                     # Load processed data, split, train a pipeline, save it, and log to MLflow
 │   └── tune.py                                      # Hyperparameter search across model families
 ├── tests/
+│   ├── __init__.py                                  # Marks the folder as a Python package
 │   ├── test_api.py                                  # Automated tests for the Flask API endpoints
 │   ├── test_config.py                               # Tests for the config loader
 │   ├── test_drift.py                                # Tests for the drift simulation in src/drift.py

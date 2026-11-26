@@ -21,12 +21,9 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-import sys, os
 
-# The module under test lives in src/, which is not on Python's import path
-# by default. Prepending it to sys.path lets us write `from tune import ...`.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
+# `tune` lives in src/. pytest.ini sets `pythonpath = . src`, so src/ is on
+# the import path while tests run and this plain import works.
 from tune import build_deployment_pipeline, parse_args, feature_importances, NUM_COLS, CAT_COLS
 
 

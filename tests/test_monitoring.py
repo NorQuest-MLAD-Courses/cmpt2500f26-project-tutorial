@@ -12,12 +12,9 @@ Run it from the project root with::
 
 import pytest
 from prometheus_client import REGISTRY
-import sys, os
 
-# The module under test lives in src/, which is not on Python's import path
-# by default. Prepending it to sys.path lets us write `from utils import ...`.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
+# `utils` lives in src/. pytest.ini sets `pythonpath = . src`, so src/ is on
+# the import path while tests run and this plain import works.
 from utils.monitoring import TrainingMonitor
 
 

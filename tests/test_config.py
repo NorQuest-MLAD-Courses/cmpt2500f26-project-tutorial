@@ -13,12 +13,9 @@ file before a script fails on it. It uses a relative path, so pytest must be
 started from the project root.
 """
 
-import sys, os
 
-# The module under test lives in src/, which is not on Python's import path
-# by default. Prepending it to sys.path lets us write `from utils.config import ...`.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
+# `utils.config` lives in src/utils/. pytest.ini sets `pythonpath = . src`, so
+# src/ is on the import path while tests run and this plain import works.
 from utils.config import load_config
 
 
